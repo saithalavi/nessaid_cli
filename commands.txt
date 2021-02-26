@@ -10,6 +10,7 @@ pip3 uninstall -y nessaid_cli
 
 python setup.py clean --all
 
+python setup.py sdist bdist_wheel
 python setup.py install
 
 python -m twine upload -r testpypi dist\* --verbose
