@@ -1,0 +1,14 @@
+# Handy commands while developing in windows.
+
+del /F /Q nessaid_cli\__pycache__\*
+del /F /Q nessaid_cli\dist\*
+del /F /Q nessaid_cli\build\*
+del /F /Q nessaid_cli\tokenizer\__pycache__\*
+del /F /Q nessaid_cli\binding_parser\__pycache__\*
+
+pip3 uninstall -y nessaid_cli
+
+python setup.py clean --all
+
+python setup.py install
+
