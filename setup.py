@@ -69,7 +69,8 @@ if os.name == 'nt':
 
 setup(
     name=pkg_name,
-    version='1.0.1',
+    version='1.0',
+    url='https://github.com/saithalavi/nessaid_cli',
     description="Nessaid's CLI tools",
     long_description=long_description,
     author='Saithalavi M',
@@ -87,6 +88,11 @@ setup(
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
     ],
+    project_urls = {
+        'Documentation': 'https://github.com/saithalavi/nessaid_cli/blob/master/README.md',
+        'Source': 'https://github.com/saithalavi/nessaid_cli',
+        'Tracker': 'https://github.com/saithalavi/nessaid_cli/issues',
+    },
 )
 
 if __name__ == '__main__':

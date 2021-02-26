@@ -12,3 +12,5 @@ python setup.py clean --all
 
 python setup.py install
 
+python -m twine upload -r testpypi dist\* --verbose
+python -m twine upload dist/*
