@@ -19,6 +19,10 @@ This package provides two classes for CLI building. NessaidCmd is intended to wo
 
 <b>NessaidCli</b>: The generic base class for the CLI impelemntation. NessaidCmd is the stripped down version as an alternative for the default Cmd implementation
 
+## Installation
+This package can be installed by cloning this repo and running python3 setup.py install from top directoy.
+It's also available in pypi. <b>pip3 install nessaid_cli</b> will install the package.
+
 ## The Grammar
 The grammar used to define the CLI commands is a simple context free grammar. The grammar specification can have definitions for individual tokens and multiple named grammars composed of the tokens.
 
