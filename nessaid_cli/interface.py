@@ -51,6 +51,7 @@ class ParsingResult():
         self.next_tokens = []
         self.next_constant_token = None
         self.matched_values = []
+        self.case_insensitive = False
 
     def as_dict(self):
         return {
@@ -63,6 +64,7 @@ class ParsingResult():
             'next_tokens': self.next_tokens,
             'last_token': self.last_token,
             'next_constant_token': self.next_constant_token,
+            'case_insensitive': self.case_insensitive,
         }
 
     def __repr__(self):
@@ -103,6 +105,7 @@ class ParsingResult():
         tokens = list(tokens)
         next_tokens = set()
         self.last_token = None
+        self.case_insensitive = False
 
         for t in tokens:
             if t:
@@ -111,6 +114,8 @@ class ParsingResult():
                     if not completions:
                         next_tokens.add(t.helpstring)
                     else:
+                        if t.case_insensitive:
+                            self.case_insensitive = True
                         for c in completions:
                             next_tokens.add(str(c))
                 else:
@@ -368,6 +373,8 @@ class ExecContext():
                     if isinstance(parent, AlternativeInputElement):
                         position = 0
                     elif parent.repeat_count > 1:
+                        position = 0
+                    elif cur_element.has_parenthesis:
                         position = 0
 
                 numbered_arg = NumberedVariable("$" + str(position + 1))

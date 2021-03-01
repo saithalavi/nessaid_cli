@@ -5,6 +5,13 @@
 # file included as part of this package.
 #
 
+import os
+import string
+import fnmatch
+import platform
+from pathlib import Path
+
+
 MATCH_SUCCESS = 'success'
 MATCH_FAILURE = 'failure'
 MATCH_PARTIAL = 'partial'
@@ -49,6 +56,10 @@ class CliToken():
 
     def __str__(self):
         return self.__repr__()
+
+    @property
+    def case_insensitive(self):
+        return False
 
     def get_value(self, match_string=None):
         if self.completable:
@@ -416,3 +427,275 @@ class RangedDecimalToken(CliToken):
         except Exception:
             pass
         return None
+
+
+
+class PathTokenPath():
+
+    def __init__(self, path, path_string, partial=False):
+        self.path = path
+        self.path_string = path_string
+        self.partial = partial
+        self.is_dir = path.is_dir()
+        self.exists = path.exists()
+        self.has_dir_completion = False
+
+    def __repr__(self):
+        return "{}: {}".format(self.path, self.path_string)
+
+    def __str__(self):
+        return "{}: {}".format(self.path, self.path_string)
+
+
+class PathToken(StringToken):
+
+    ANY = 'path'
+    FILE = 'file'
+    DIRECTORY = 'directory'
+
+    def __init__(self, name, pathtype=ANY):
+        self._pathtype = pathtype
+        self._is_windows = None
+        super().__init__(name)
+
+    def get_drives(self):
+        drives = []
+        if self.is_windows:
+            for c in string.ascii_lowercase:
+                if os.path.isdir(c + ':'):
+                    drives.append(c + ':')
+        return drives
+
+    @property
+    def completable(self):
+        return True
+
+    @property
+    def is_windows(self):
+        if self._is_windows is None:
+            os_system = platform.system()
+            if os_system.lower() == 'windows':
+                self._is_windows = True
+            else:
+                self._is_windows = False
+        return self._is_windows
+
+    @property
+    def case_insensitive(self):
+        if self.is_windows:
+            return True
+        return False
+
+    @property
+    def helpstring(self):
+        if self.is_windows:
+            path_sep = "\\\\"
+        else:
+            path_sep = "/"
+        return "A {}.".format(self._pathtype) + ' Start the input with quote (") and use {} as separator'.format(path_sep)
+
+    def complete(self, str_input):
+        return TOO_MANY_COMPLETIONS, []
+
+    def children(self, path):
+        try:
+            content = os.listdir(path)
+            if "." in content:
+                content.remove(".")
+            if ".." in content:
+                content.remove("..")
+            return content
+        except PermissionError:
+            print("\nPermissionError on {}\n".format(path))
+            return []
+
+    def get_value(self, str_input):
+        m, n, l, _ = self.lookup(str_input)
+        if n == 0:
+            return None
+        elif n == 1:
+            return l[0].path_string
+        else:
+            return str_input
+
+    def complete(self, str_input):
+        if str_input == "":
+            return TOO_MANY_COMPLETIONS, []
+        elif str_input == '"':
+            if self.is_windows:
+                path_sep = "\\\\"
+            else:
+                path_sep = "/"
+
+            options = ['".', '"..', '"' + path_sep]
+            children = self.children(os.path.curdir)
+            options += ['"' + c for c in children]
+            return len(options), options
+        else:
+            if str_input.startswith('"') and str_input.endswith('"') and len(str_input) > 1:
+                path_complete = True
+            else:
+                path_complete = False
+            m, n, l, path_sep = self.lookup(str_input)
+
+            if not path_complete:
+                for elem in l.copy():
+                    if elem.is_dir and elem.has_dir_completion:
+                        children = self.children(elem.path)
+                        for c in children:
+                            path_string = elem.path_string + c
+                            l += [PathTokenPath(Path(path_string), path_string)]
+
+            if m == MATCH_PARTIAL and len(l) == 1:
+                if l[0].is_dir and not l[0].has_dir_completion:
+                    l.append(PathTokenPath(l[0].path, l[0].path_string + path_sep, partial=True))
+                if not l[0].is_dir:
+                    path_complete = True
+                else:
+                    if not l[0].has_dir_completion:
+                        if l[0].path_string == os.path.curdir or l[0].path_string.endswith(path_sep + os.path.curdir):
+                            p = l[0].path_string + os.path.curdir
+                            l.append(PathTokenPath(Path(p), p, partial=True))
+                    else:
+                        if not self.children(l[0].path):
+                            path_complete = True
+
+            return n, ['"' + str(elem.path_string) + ('"' if path_complete else "") for elem in l]
+
+    def match(self, str_input):
+
+        if str_input.startswith('"') and str_input.endswith('"') and len(str_input) > 1:
+            path_complete = True
+        else:
+            path_complete = False
+        m, n, l, _ = self.lookup(str_input)
+        if m == MATCH_PARTIAL and len(l) == 1:
+            if path_complete:
+                return MATCH_SUCCESS
+            elif not l[0].is_dir:
+                return MATCH_SUCCESS
+        return m
+
+    def lookup(self, str_input):
+        path_complete = False
+        if str_input == "":
+            return MATCH_PARTIAL, TOO_MANY_COMPLETIONS, [], os.path.pathsep
+
+        if str_input.startswith('"'):
+            str_input = str_input[1:]
+
+            if str_input.endswith('"'):
+                str_input = str_input[:-1]
+                path_complete = True
+
+        segments = str_input.split(os.path.sep)
+        add_drive_mark = ""
+
+        path_sep = "/"
+        if not segments:
+            if not self.is_windows:
+                return MATCH_FAILURE, 0, [], path_sep
+            segments = str_input.split("/")
+            if not segments:
+                return MATCH_FAILURE, 0, [], path_sep
+        else:
+            if self.is_windows:
+                path_sep = "\\"
+
+        path_string = ""
+        partial_drive = None
+
+        if segments[0] == "":
+            if len(segments) == 1:
+                path_string = ""
+            else:
+                path_string = path_sep
+        elif self.is_windows:
+            if len(segments[0]) == 2 and segments[0][1] == ":":
+                path_string = segments[0]
+                add_drive_mark = path_sep
+            elif len(segments[0]) == 3 and segments[0][0] == "/" and segments[0][2] == ":":
+                path_string = segments[0][1:]
+                add_drive_mark = path_sep
+
+        if path_string:
+            path_objects = [PathTokenPath(Path(path_string + add_drive_mark), path_string)]
+            if path_string == path_sep:
+                path_objects[0].has_dir_completion = True
+            segments.pop(0)
+        else:
+            path_objects = [PathTokenPath(Path(os.path.curdir), "")]
+            if self.is_windows and len(segments) == 1 and not path_complete:
+                if (segments[0].lower() + ":") in self.get_drives():
+                    partial_drive = Path(segments[0] + ":\\")
+                    partial_drive_str = segments[0] + ":"
+
+        while segments:
+            path_objects = [p for p in path_objects if p.is_dir and not p.partial]
+            for p in path_objects:
+                if p.path_string and not p.path_string.endswith(path_sep):
+                    p.path_string += path_sep
+                    p.has_dir_completion = True
+
+            segment = segments.pop(0)
+            if segment == "":
+                break
+
+            p.has_dir_completion = False
+
+            if segment == ".":
+                for p in path_objects:
+                    p.path_string += "."
+                continue
+            elif segment == "..":
+                for p in path_objects:
+                    p.path_string += ".."
+                    p.path = Path(p.path_string)
+            elif segment == "*":
+                opts = []
+                for p in path_objects:
+                    children = self.children(p.path)
+                    for c in children:
+                        path_string = p.path_string + c
+                        opts.append(PathTokenPath(Path(path_string), path_string))
+                path_objects = opts
+            else:
+                opts = []
+                for p in path_objects:
+                    children = self.children(p.path)
+                    if self.case_insensitive:
+                        exacts = [p.path_string + c for c in children if c.lower() == segment.lower()]
+                    else:
+                        exacts = [p.path_string + c for c in children if c == segment]
+
+                    matches = [p.path_string + c for c in children if fnmatch.fnmatch(c, segment) and p.path_string + c not in exacts]
+                    matches = list(set(matches + exacts))
+                    opts += [PathTokenPath(Path(m), m) for m in matches]
+                    if not path_complete:
+                        if not self.case_insensitive:
+                            path_strings = matches
+                            partial_matches = [PathTokenPath(Path(p.path_string + c), p.path_string + c, partial=True) for c in children if c.startswith(segment) and p.path_string + c not in path_strings]
+                        else:
+                            path_strings = [m.lower() for m in matches]
+                            partial_matches = [PathTokenPath(Path(p.path_string + c), p.path_string + c, partial=True) for c in children if c.lower().startswith(segment.lower()) and p.path_string.lower() + c.lower() not in path_strings]
+                        opts += partial_matches
+
+                if partial_drive:
+                    path_objects = [PathTokenPath(partial_drive, partial_drive_str, partial=True)]
+                    partial_drive = None
+                else:
+                    path_objects = []
+                path_objects += opts
+
+        dirs = [d for d in path_objects if d.is_dir]
+        files = [f for f in path_objects if not f.is_dir]
+
+        if (len(dirs) + len(files)) == 1:
+            if (dirs + files)[0].partial or not path_complete:
+                return MATCH_PARTIAL, 1, dirs + files, path_sep
+            else:
+                return MATCH_SUCCESS, 1, dirs + files, path_sep
+
+        if (len(dirs) + len(files)) == 0:
+            return MATCH_FAILURE, 0, [], path_sep
+        return MATCH_PARTIAL, len(dirs) + len(files), (dirs + files), path_sep

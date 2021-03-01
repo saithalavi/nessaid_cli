@@ -13,7 +13,8 @@ from nessaid_cli.tokens import (
     RangedDecimalToken,
     AlternativeStringsToken,
     StringToken,
-    RangedStringToken
+    RangedStringToken,
+    PathToken
 )
 
 
@@ -47,7 +48,7 @@ class testCmd(NessaidCmd):
     # less than or equal to it, the CLI will list it as the suggestions.
     # Else CLI will print the helpstring as suggestion
 
-
+    token RANGED_STRING_TOKEN_1 RangedStringToken(2, 10);
     token decimal RangedDecimalToken(-11.1, 10.6); # Decimal token.
     # min and max range. No numbers will be suggested
     token negative_integer RangedIntToken(-100, -1000);
@@ -60,6 +61,7 @@ class testCmd(NessaidCmd):
 
     token str_token StringToken();
     token ranged_str_token RangedStringToken(5, 10);
+    token PATH_TOKEN PathToken();
 
     gent:
         "gent1" | "gent2" | "gent3" | "gent4" | "gent5"
@@ -85,12 +87,34 @@ class testCmd(NessaidCmd):
         <<print($msg);>>
         ;
     """
+    def do_seq(self, opt, arg):
+        """
+        "seq"
+        {
+            "opt1"
+            RANGED_STRING_TOKEN_1 << $opt = $2; >>
+        }
+        (
+            RANGED_STRING_TOKEN_1 << $arg = $1; >>
+        )
+        """
+        if opt:
+            print("opt:", opt)
+        print("arg:", arg)
 
     def do_main_grammar(self):
         """
         main_grammar
         """
         pass
+
+    def do_path(self, path):
+        """
+        "path"
+        PATH_TOKEN
+        <<$path = $2;>>
+        """
+        print(path)
 
     def get_token_classes(self):
         """Method to override.
@@ -101,7 +125,8 @@ class testCmd(NessaidCmd):
             RangedDecimalToken,
             AlternativeStringsToken,
             StringToken,
-            RangedStringToken
+            RangedStringToken,
+            PathToken
         ]
 
     # do_ is the default prefix for CLI command handler methods.

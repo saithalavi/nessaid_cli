@@ -131,6 +131,25 @@ class NessaidCli(CliInterface):
             match_output = self.match(tokens, dry_run=True, last_token_complete=last_token_complete)
             completions = []
 
+            def cli_rindex(string, substring):
+                try:
+                    return string.rindex(substring), 0
+                except Exception:
+                    if match_output.case_insensitive:
+                        string = string.lower()
+                        substring = substring.lower()
+                    n = substring.count("\\")
+                    return string.rindex(substring.replace("\\", "\\\\")), n
+
+            def cli_startswith(string, substring):
+                if string.startswith(substring):
+                    return True
+                else:
+                    if match_output.case_insensitive:
+                        if string.lower().startswith(substring.lower()):
+                            return True
+                return False
+
             has_full_match = False
             if match_output.next_tokens and EndOfInpuToken() in match_output.next_tokens:
                 match_output.next_tokens.remove(EndOfInpuToken())
@@ -145,18 +164,18 @@ class NessaidCli(CliInterface):
                 if match_output.last_token:
                     tok_input = match_output.last_token[0]
                     tok_replacement = match_output.last_token[1]
-                    if tok_replacement and tok_replacement.startswith(tok_input):
+                    if tok_replacement and cli_startswith(tok_replacement, tok_input):
                         if tok_input != tok_replacement:
                             if line == self._current_line:
-                                idx = line.rindex(tok_input)
-                                replace_len = len(line) - idx
+                                idx, reps = cli_rindex(line, tok_input)
+                                replace_len = len(line) - idx - reps
                                 readline.insert_text(tok_replacement[replace_len:])
                                 self._suggestion_shown = False
                                 return None
                             elif self._suggestion_shown and self._current_line and len(line) > len(self._current_line):
-                                if line.startswith(self._current_line):
-                                    idx = line.rindex(tok_input)
-                                    replace_len = len(line) - idx
+                                if cli_startswith(line, self._current_line):
+                                    idx, reps = cli_rindex(line, tok_input)
+                                    replace_len = len(line) - idx - reps
                                     readline.insert_text(tok_replacement[replace_len:])
                                     if len(completions) == 1 and completions[0] == tok_replacement:
                                         readline.insert_text(DEFAULT_SEPARATOR)
