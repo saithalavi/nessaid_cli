@@ -202,14 +202,19 @@ class NessaidCliTokenizer():
         'incomplete_quoted_string : OPEN_QUOTE quote_body'
         t2 = t[2]
 
+        t2s = t2.split("\\\\")
+
         replace_patterns = {
+            '\\"': '"',
             "\\n": "\n",
             "\\r": "\r",
             "\\t": "\t",
         }
 
         for k, v in replace_patterns.items():
-            t2 = t2.replace(k, v)
+            t2s = [t.replace(k, v) for t in t2s]
+
+        t2 = "\\".join(t2s)
 
         t[0] = '"' + t2
 
@@ -239,8 +244,8 @@ class NessaidCliTokenizer():
         """quote_segment : QUOTED_CONTENT
                          | ESCAPED_CHAR"""
         t1 = t[1]
-        if t1 in ["\\\\", "\\\""]:
-            t1 = t1[1:]
+        # if t1 in ["\\\\", "\\\""]:
+        #     t1 = t1[1:]
         t[0] = t1
 
     def p_empty(self, t):
