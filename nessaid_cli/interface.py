@@ -369,6 +369,8 @@ class ExecContext():
                         position = 0
                     elif parent.repeat_count > 1:
                         position = 0
+                    elif cur_element.has_parenthesis:
+                        position = 0
 
                 numbered_arg = NumberedVariable("$" + str(position + 1))
                 numbered_arg.assign(BindingObject.create_object(cur_context.token_value))
