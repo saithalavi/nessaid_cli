@@ -400,7 +400,7 @@ class InputElement():
         return self
 
     def handle_sequencing(self, t2):
-        if not self.has_repeater and not t2.has_repeater:
+        if not self.has_binding_or_repeater and not t2.has_binding_or_repeater:
             if isinstance(t2, SequenceInputElement):
                 first = t2.get(0)
                 if not t2.pre_exec_binding or first.mandatory:
@@ -706,14 +706,14 @@ class SequenceInputElement(InputElementCollection):
         return t0
 
     def handle_sequencing(self, t2):
-        if self.has_repeater:
+        if self.has_binding_or_repeater:
             t0 = SequenceInputElement((self, t2))
             self.parent = t0
             t2.parent = t0
             if self.has_binding or t2.has_binding:
                 t0.has_binding = True
         else:
-            if not t2.has_repeater and isinstance(t2, SequenceInputElement):
+            if not t2.has_binding_or_repeater and isinstance(t2, SequenceInputElement):
                 part2 = t2.value
                 if t2.pre_exec_binding:
                     first = t2.get(0)
