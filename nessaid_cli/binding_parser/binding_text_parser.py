@@ -18,6 +18,7 @@ from nessaid_cli.binding_parser.binding_objects import (
     AssignmentStatement,
     BindingIntObject,
     BindingStrObject,
+    BindingBoolObject,
     BindingFloatObject)
 
 
@@ -36,6 +37,8 @@ class NessaidCliBindingLexer(NessaidCliLexerCommon):
         'NEWLINE',
         'ESCAPED_NEWLINE',
         'LEXER_WARNING',
+        'TRUE',
+        'FALSE',
     )
 
     t_ignore  = ' \t'
@@ -46,6 +49,14 @@ class NessaidCliBindingLexer(NessaidCliLexerCommon):
         t.lexer.lineno += count
 
     t_ignore_COMMENT.__doc__ = NessaidCliLexerCommon.REGEX_COMMENT
+
+    def t_TRUE(self, t):
+        "True"
+        return t
+
+    def t_FALSE(self, t):
+        "False"
+        return t
 
     def t_NEWLINE(self, t):
         count = self.count_newlines(t.value)
@@ -168,6 +179,8 @@ class NessaidCliBindingParser():
                      | call_block
                      | quoted_string
                      | number
+                     | boolean_true
+                     | boolean_false
                      | function_block"""
         t[0] = t[1]
         #print("RHS matched:", t[1])
@@ -237,6 +250,8 @@ class NessaidCliBindingParser():
         """argument : dollar_id
                     | number
                     | quoted_string
+                    | boolean_true
+                    | boolean_false
                     | call_block
                     | function_block"""
         t0 = t[1]
@@ -247,6 +262,14 @@ class NessaidCliBindingParser():
                   | float"""
         t0 = t[1]
         t[0] = t0
+
+    def p_boolean_true(self, t):
+        """boolean_true : TRUE"""
+        t[0] = BindingBoolObject(True)
+
+    def p_boolean_false(self, t):
+        """boolean_false : FALSE"""
+        t[0] = BindingBoolObject(False)
 
     def p_integer(self, t):
         """integer : INTEGER"""

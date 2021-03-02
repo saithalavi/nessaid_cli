@@ -551,7 +551,7 @@ class CliInterface():
 
     def execute_binding_call(self, func_name, local_function, *args, **kwarg):
         try:
-            ext_args = [self.evaluate(arg) if arg else None for arg in args]
+            ext_args = [self.evaluate(arg) if arg is not None else None for arg in args]
 
             if not local_function:
                 if not hasattr(self, self.get_cli_hook(func_name)):

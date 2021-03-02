@@ -14,7 +14,8 @@ from nessaid_cli.tokens import (
     AlternativeStringsToken,
     StringToken,
     RangedStringToken,
-    PathToken
+    PathToken,
+    BooleanToken
 )
 
 
@@ -36,6 +37,7 @@ for the CLI grammar, like token definitions and shared grammars
 """
 class testCmd(NessaidCmd):
     """
+    token BOOLEAN BooleanToken();
     token person; # Basic token, matches the string 'person'
     token age; # Basic token, matches the string 'age'
     token age_token RangedIntToken(1, 120);
@@ -126,8 +128,22 @@ class testCmd(NessaidCmd):
             AlternativeStringsToken,
             StringToken,
             RangedStringToken,
-            PathToken
+            PathToken,
+            BooleanToken
         ]
+
+    def do_boolean(self, b):
+        """
+        <<$boo = True;>>
+        "boolean"
+        BOOLEAN << $b = $2; >>
+        <<
+            print("BOOO:", $boo);
+            print("True:", True);
+            print("False:", False);
+        >>
+        """
+        print(b)
 
     # do_ is the default prefix for CLI command handler methods.
     # The doc string is the grammar

@@ -91,6 +91,9 @@ class BindingObject():
         if value is None:
             return BindingNoneObject()
 
+        if isinstance(value, bool):
+            return BindingBoolObject(value)
+
         if isinstance(value, int):
             return BindingIntObject(value)
 
@@ -126,6 +129,12 @@ class BindingIntObject(BindingObject):
 
     def __init__(self, val):
         self._value = int(val)
+
+
+class BindingBoolObject(BindingObject):
+
+    def __init__(self, val):
+        self._value = bool(val)
 
 
 class BindingFloatObject(BindingObject):

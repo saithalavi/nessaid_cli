@@ -447,6 +447,52 @@ class PathTokenPath():
         return "{}: {}".format(self.path, self.path_string)
 
 
+class BooleanToken(StringToken):
+
+    def __init__(self, name):
+        super().__init__(name)
+
+    @property
+    def completable(self):
+        return True
+
+    @property
+    def case_insensitive(self):
+        return True
+
+    @property
+    def helpstring(self):
+        return "True or False"
+
+    def complete(self, str_input):
+        if not str_input:
+            return 2, ["True", "False"]
+        elif str_input.lower() in ["true", "false"]:
+            return 1, [str_input]
+        elif "true".startswith(str_input.lower()):
+            return 1, [str_input + "true"[len(str_input):]]
+        elif "false".startswith(str_input.lower()):
+            return 1, [str_input + "false"[len(str_input):]]
+        return 0, []
+
+    def match(self, str_input):
+        n, l = self.complete(str_input)
+        if n == 0:
+            return MATCH_FAILURE
+        elif n == 1:
+            if str_input.lower() in ["true", "false"]:
+                return MATCH_SUCCESS
+        return MATCH_PARTIAL
+
+    def get_value(self, str_input):
+        n, l = self.complete(str_input)
+        if n == 1:
+            if l[0].lower() == "true":
+                return True
+            return False
+        return None
+
+
 class PathToken(StringToken):
 
     ANY = 'path'
