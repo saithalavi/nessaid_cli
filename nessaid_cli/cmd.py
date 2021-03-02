@@ -82,11 +82,11 @@ class NessaidCmd(NessaidCli):
                 if argnames:
                     grammar_name_line += "      <<\n"
                     for arg in argnames:
-                        grammar_name_line += "      ${argname} = \"\";\n".format(argname=arg)
+                        grammar_name_line += "        ${argname} = \"\";\n".format(argname=arg)
                     grammar_name_line += "      >>\n"
                 hook_grammar = grammar_name_line
                 hook_grammar +=  "      ("
-                hook_grammar += hook.__doc__ + "\n"
+                hook_grammar += hook.__doc__.rstrip() + "\n"
                 hook_grammar +=  "      )\n"
                 hook_grammar +=  "      <<call {grammar_name}({grammar_args});>>".format(
                     grammar_name=self.get_cli_hook(gramar_name),
@@ -126,3 +126,44 @@ class NessaidCmd(NessaidCli):
         """
 
         return await super().cmdloop(grammarname=self.generate_root_grammar_name(), intro=intro)
+
+    async def exec_line(self, *args):
+        try:
+            grammar = self.generate_root_grammar_name()
+        except Exception as e:
+            print("Exception getting root grammar:")
+            return 1
+
+        try:
+            self.enter_grammar(self.generate_root_grammar_name())
+        except Exception as e:
+            print("Exception entering grammar:", grammar, "Error:", e)
+            return 2
+
+
+        modified_args = []
+        chars_to_check = [" "]
+        for arg in args:
+            if not (arg.startswith('"') and arg.endswith('"')):
+                need_quoting = False
+                for c in chars_to_check:
+                    if c in arg:
+                        need_quoting = True
+                        break
+                if need_quoting:
+                    modified_args.append('"' + arg + '"')
+                else:
+                    modified_args.append(arg)
+
+        args = modified_args
+
+        try:
+            await self.cli_exec_init()
+            await super().exec_line(*args)
+        except Exception as e:
+            print("Exception executing grammar:", grammar, "input:", args, "Error:", e)
+            return 3
+        finally:
+            self.exit_grammar()
+        return 0
+

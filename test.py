@@ -319,9 +319,14 @@ class testCmd(NessaidCmd):
 
 
 if __name__ == '__main__':
-    cmd = testCmd(prompt="nessaid-cmd # ", show_grammar=True)
-    #show_grammar will print the generated grammar specification
+
+    if len(sys.argv) > 1:
+        argv = sys.argv[1:]
+        cmd = testCmd(prompt="nessaid-cmd # ", show_grammar=False)
+        resp = cmd.loop.run_until_complete(cmd.exec_line(*argv))
+        sys.exit(0)
     try:
+        cmd = testCmd(prompt="nessaid-cmd # ", show_grammar=True)
         cmd.loop.run_until_complete(cmd.cmdloop(intro="Starting Nessaid CMD Demo"))
     except KeyboardInterrupt:
         sys.exit(0)

@@ -47,6 +47,7 @@ class NessaidCli(CliInterface):
         self._old_completer = None
         self._completion_matches = []
         self._exit_loop = False
+        self._exec_inited = False
         self._current_line = None
         self._prompt = "" if not prompt else prompt
         self._empty_line_matching = False
@@ -236,11 +237,28 @@ class NessaidCli(CliInterface):
         """Exit thr running Cli loop"""
         self._exit_loop = True
 
-    async def cmdloop(self, grammarname, intro=None):
-        self.enter_grammar(grammarname)
+    async def exec_line(self, *args):
+        line = " ".join(args)
         try:
-            await self.preloop()
+            tokens = self.tokenize(line)
+        except Exception as e:
+            print("Exception tokenizing input line:", type(e), e)
+            print("\n")
+            traceback.print_tb(e.__traceback__)
+            print("\n")
 
+        try:
+            arglist = []
+            match_output = self.match(tokens, dry_run=False, last_token_complete=True, arglist=arglist)
+            self.process_cli_response(tokens, match_output)
+        except Exception as e:
+            print("Exception parsing input line:", type(e), e)
+            print("\n")
+            traceback.print_tb(e.__traceback__)
+            print("\n")
+
+    async def cli_exec_init(self):
+        if not self._exec_inited:
             if self._use_rawinput and self._completekey:
                 self._old_completer = readline.get_completer()
                 readline.set_completer(self.complete)
@@ -248,7 +266,13 @@ class NessaidCli(CliInterface):
                     readline.parse_and_bind("bind ^I rl_complete")
                 else:
                   readline.parse_and_bind(self._completekey+": complete")
+            self._exec_inited = True
 
+    async def cmdloop(self, grammarname, intro=None):
+        self.enter_grammar(grammarname)
+        try:
+            await self.preloop()
+            await self.cli_exec_init()
             if intro is not None:
                 self._stdout.write(str(intro)+"\n")
 
