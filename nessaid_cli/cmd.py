@@ -65,7 +65,7 @@ class NessaidCmd(NessaidCli):
         :param cli_nargs: Number of arguments the generated Cmd handlers should have.
         :param show_grammar: print the generated grammar before the Cmd prompt.
         """
-
+        self.execute = self.exec_line
         grammar_text = self.__doc__ if self.__doc__ else ""
         grammar_hooks = [getattr(self, f) for f in dir(self) if f.startswith(cli_hook_prefix) and callable(getattr(self, f))]
         grammar_alternatives = []
@@ -126,6 +126,11 @@ class NessaidCmd(NessaidCli):
         """
 
         return await super().cmdloop(grammarname=self.generate_root_grammar_name(), intro=intro)
+
+    @classmethod
+    async def execute(cls, *args):
+        cmd = cls(prompt="# ", show_grammar=False)
+        return await cmd.exec_line(*args)
 
     async def exec_line(self, *args):
         try:

@@ -6,6 +6,7 @@
 #
 
 import sys
+import asyncio
 
 from nessaid_cli.cmd import NessaidCmd
 from nessaid_cli.tokens import (
@@ -322,8 +323,11 @@ if __name__ == '__main__':
 
     if len(sys.argv) > 1:
         argv = sys.argv[1:]
+        loop = asyncio.get_event_loop()
+        resp = loop.run_until_complete(testCmd.execute(*argv))
         cmd = testCmd(prompt="nessaid-cmd # ", show_grammar=False)
-        resp = cmd.loop.run_until_complete(cmd.exec_line(*argv))
+        resp = cmd.loop.run_until_complete(cmd.execute(*argv))
+        resp = loop.run_until_complete(testCmd.execute(*argv))
         sys.exit(0)
     try:
         cmd = testCmd(prompt="nessaid-cmd # ", show_grammar=True)
