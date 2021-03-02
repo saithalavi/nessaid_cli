@@ -399,9 +399,17 @@ class InputElement():
             self.has_binding = True
         return self
 
+    def is_terminal_token_sequence(self, t2):
+        if isinstance(t2, SequenceInputElement):
+            for v in t2._value:
+                if not t2.terminal_token or t2.has_parenthesis:
+                    return False
+            return True
+        return False
+
     def handle_sequencing(self, t2):
-        if not self.has_binding_or_repeater and not t2.has_binding_or_repeater:
-            if isinstance(t2, SequenceInputElement):
+        if not self.has_repeater and not t2.has_repeater and self.terminal_token and not self.has_parenthesis:
+            if self.is_terminal_token_sequence(t2):
                 first = t2.get(0)
                 if not t2.pre_exec_binding or first.mandatory:
                     if t2.pre_exec_binding:
@@ -705,15 +713,23 @@ class SequenceInputElement(InputElementCollection):
 
         return t0
 
+    def is_terminal_token_sequence(self, t2):
+        if isinstance(t2, SequenceInputElement):
+            for v in t2._value:
+                if not t2.terminal_token or t2.has_parenthesis:
+                    return False
+            return True
+        return False
+
     def handle_sequencing(self, t2):
-        if self.has_binding_or_repeater:
+        if self.has_repeater:
             t0 = SequenceInputElement((self, t2))
             self.parent = t0
             t2.parent = t0
             if self.has_binding or t2.has_binding:
                 t0.has_binding = True
         else:
-            if not t2.has_binding_or_repeater and isinstance(t2, SequenceInputElement):
+            if not t2.has_repeater and self.is_terminal_token_sequence(t2):
                 part2 = t2.value
                 if t2.pre_exec_binding:
                     first = t2.get(0)
@@ -879,7 +895,7 @@ class AlternativeInputElement(InputElementCollection):
 
     @property
     def terminal_token(self):
-        if not  self._value:
+        if not self._value:
             return False
         for e in self._value:
             if e.terminal_token is False:
