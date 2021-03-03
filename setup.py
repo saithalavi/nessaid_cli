@@ -12,9 +12,10 @@ from setuptools import setup
 
 
 pkg_name = 'nessaid_cli'
+test_pkg_name = 'nessaid_cli_tests'
 sub_packages = ['binding_parser', 'tokenizer']
 
-install_packages = [pkg_name] + [pkg_name + "." + sub_pkg for sub_pkg in sub_packages]
+install_packages = [pkg_name, test_pkg_name] + [pkg_name + "." + sub_pkg for sub_pkg in sub_packages]
 
 clanup_dirs = ['build', 'dist', pkg_name + '.egg-info']
 
@@ -69,7 +70,7 @@ if os.name == 'nt':
 
 setup(
     name=pkg_name,
-    version='1.0.2',
+    version='1.1.0',
     url='https://github.com/saithalavi/nessaid_cli',
     description="Nessaid's CLI tools",
     long_description=long_description,
@@ -93,6 +94,7 @@ setup(
         'Source': 'https://github.com/saithalavi/nessaid_cli',
         'Tracker': 'https://github.com/saithalavi/nessaid_cli/issues',
     },
+    test_suite="nessaid_cli_tests",
 )
 
 if __name__ == '__main__':

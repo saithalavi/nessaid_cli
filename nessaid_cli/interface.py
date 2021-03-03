@@ -5,6 +5,8 @@
 # file included as part of this package.
 #
 
+import sys
+
 from nessaid_cli.compiler import CompiledGrammarSet
 
 from nessaid_cli.tokens import (
@@ -146,7 +148,10 @@ class ParsingResult():
 
 class ElementContext():
 
-    def __init__(self, element, token_value, param_list=None):
+    def __init__(self, exec_context, element, token_value, param_list=None):
+        self._exec_context = exec_context
+        self.print = exec_context.print
+        self.error = exec_context.error
         self._arg_values = {}
         self._num_arg_values = {}
         self._local_variables = {}
@@ -186,7 +191,7 @@ class ElementContext():
 
     def set_number_arg(self, position, value):
         if position != value.var_index:
-            print("Bug!!!! Debug and fix with current sequence:")
+            self.error("Bug!!!! Debug and fix with current sequence:")
         self._num_arg_values[value.var_id] = value
 
     def set_argument_by_name(self, param_name, value):
@@ -203,6 +208,8 @@ class ExecContext():
 
     def __init__(self, interface, root_grammar, match_values, arglist):
         self._interface = interface
+        self.print = interface.print
+        self.error = interface.error
         self._root_grammar = root_grammar
         self._match_values = match_values
         self._root_arglist = [NamedVariable(param) for param in root_grammar.param_list]
@@ -231,7 +238,7 @@ class ExecContext():
                 parent_context = self._elem_contexts[-1]
 
             if type(element) == NamedGrammar:
-                cur_context = ElementContext(element, token_value, element.param_list)
+                cur_context = ElementContext(self, element, token_value, element.param_list)
                 if not self._elements_executing:
                     arglist = self._root_arglist
                 else:
@@ -251,7 +258,7 @@ class ExecContext():
                 arg_values = []
                 arglist = element.arg_list
                 grammar = element.get(0)
-                cur_context = ElementContext(element, token_value, grammar.param_list)
+                cur_context = ElementContext(self, element, token_value, grammar.param_list)
                 arg_index = 0
                 for arg in arglist:
                     if type(arg) == NamedVariable:
@@ -265,7 +272,7 @@ class ExecContext():
                     cur_context.set_argument_by_index(arg_index, arg_values[-1])
                     arg_index += 1
             else:
-                cur_context = ElementContext(element, token_value)
+                cur_context = ElementContext(self, element, token_value)
 
             self._elements_executing.append((element, position_sequence))
             self._elem_contexts.append(cur_context)
@@ -361,9 +368,9 @@ class ExecContext():
                 parent_context = self._elem_contexts[-1]
 
             if cur_element != element:
-                print("\n"*5)
-                print("Error in exec stack")
-                print("\n"*5)
+                self.error("\n"*5)
+                self.error("Error in exec stack")
+                self.error("\n"*5)
 
             if cur_element.terminal_token:
                 parent = None
@@ -419,15 +426,37 @@ class ExecContext():
 
 class CliInterface():
 
-    def __init__(self, grammarset):
+    def __init__(self, grammarset, stdin=None, stdout=None, stderr=None):
 
         if not isinstance(grammarset, CompiledGrammarSet):
             raise ValueError("CompiledGrammarSet object expected")
+
+        self._stdin = stdin
+        self._stdout = stdout
+        self._stderr = stderr
 
         self._tokens = {}
         self._grammars = grammarset
         self._grammar_stack = []
         self._token_class_map = None
+
+    @property
+    def stdin(self):
+        return self._stdin if self._stdin is not None else sys.stdin
+
+    @property
+    def stdout(self):
+        return self._stdout if self._stdout is not None else sys.stdout
+
+    @property
+    def stderr(self):
+        return self._stderr if self._stderr is not None else sys.stderr
+
+    def print(self, *args):
+        print(*args, file=self.stdout)
+
+    def error(self, *args):
+        print(*args, file=self.stderr)
 
     @property
     def current_grammar(self):
@@ -468,7 +497,7 @@ class CliInterface():
                         self._tokens[name] = self._token_class_map[tokendef.classname](name, *tokendef.arglist)
                         return self._tokens[name]
                     except Exception as e:
-                        print("Exception creating token object from token def:", e)
+                        self.error("Exception creating token object from token def:", e)
 
                 _globals = globals()
                 if tokendef.classname in _globals:
@@ -476,7 +505,7 @@ class CliInterface():
                         self._tokens[name] =  _globals[tokendef.classname](name, *tokendef.arglist)
                         return self._tokens[name]
                     except Exception as e:
-                        print("Exception creating token object from token def:", e)
+                        self.error("Exception creating token object from token def:", e)
             self._tokens[name] = self.create_cli_token(name, tokendef)
 
         return self._tokens[name]
@@ -492,7 +521,7 @@ class CliInterface():
             return l
 
         if func_name == 'print':
-            return print(*args)
+            return self.print(*args)
 
         if func_name == 'inc':
             r = args[0]
@@ -564,7 +593,7 @@ class CliInterface():
 
             return BindingObject.create_object(res)
         except Exception as e:
-            print("Exception executing binding call:", type(e), e)
+            self.error("Exception executing binding call:", type(e), e)
 
     def execute_success_sequence(self, matched_sequence, match_values, arglist):
 

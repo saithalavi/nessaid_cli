@@ -65,7 +65,8 @@ class NessaidCmd(NessaidCli):
         :param cli_nargs: Number of arguments the generated Cmd handlers should have.
         :param show_grammar: print the generated grammar before the Cmd prompt.
         """
-        self.execute = self.exec_line
+        self.execute_line = self.exec_line
+        self.execute_args = self.exec_args
         grammar_text = self.__doc__ if self.__doc__ else ""
         grammar_hooks = [getattr(self, f) for f in dir(self) if f.startswith(cli_hook_prefix) and callable(getattr(self, f))]
         grammar_alternatives = []
@@ -105,8 +106,8 @@ class NessaidCmd(NessaidCli):
             grammar_text = self.format_grammar(grammar_text)
 
             if show_grammar:
-                print("# Generated CLI grammar:")
-                print(grammar_text)
+                self.print("# Generated CLI grammar:")
+                self.print(grammar_text)
 
             grammar_set = compile(grammar_text)
             super().__init__(grammar_set, prompt=prompt, loop=loop,
@@ -128,45 +129,52 @@ class NessaidCmd(NessaidCli):
         return await super().cmdloop(grammarname=self.generate_root_grammar_name(), intro=intro)
 
     @classmethod
-    async def execute(cls, *args):
+    async def execute_args(cls, *args):
         cmd = cls(prompt="# ", show_grammar=False)
-        return await cmd.exec_line(*args)
+        return await cmd.exec_args(*args)
 
-    async def exec_line(self, *args):
-        try:
-            grammar = self.generate_root_grammar_name()
-        except Exception as e:
-            print("Exception getting root grammar:")
-            return 1
+    @classmethod
+    async def execute_line(cls, line):
+        cmd = cls(prompt="# ", show_grammar=False)
+        return await cmd.exec_line(line)
 
-        try:
-            self.enter_grammar(self.generate_root_grammar_name())
-        except Exception as e:
-            print("Exception entering grammar:", grammar, "Error:", e)
-            return 2
-
-
+    async def exec_args(self, *args):
         modified_args = []
         chars_to_check = [" "]
         for arg in args:
             if not (arg.startswith('"') and arg.endswith('"')):
                 need_quoting = False
                 for c in chars_to_check:
-                    if c in arg:
-                        need_quoting = True
-                        break
+                    if arg.strip():
+                        if c in arg:
+                            need_quoting = True
+                            break
                 if need_quoting:
                     modified_args.append('"' + arg + '"')
-                else:
-                    modified_args.append(arg)
+                    continue
+            modified_args.append(arg)
 
         args = modified_args
+        line = " ".join(args)
+        return await self.exec_line(line)
 
+
+    async def exec_line(self, line):
+        try:
+            grammar = self.generate_root_grammar_name()
+        except Exception as e:
+            self.error("Exception getting root grammar:")
+            return 1
+        try:
+            self.enter_grammar(self.generate_root_grammar_name())
+        except Exception as e:
+            self.error("Exception entering grammar:", grammar, "Error:", e)
+            return 2
         try:
             await self.cli_exec_init()
-            await super().exec_line(*args)
+            await super().exec_line(line)
         except Exception as e:
-            print("Exception executing grammar:", grammar, "input:", args, "Error:", e)
+            self.error("Exception executing grammar:", grammar, "input:", line, "Error:", e)
             return 3
         finally:
             self.exit_grammar()

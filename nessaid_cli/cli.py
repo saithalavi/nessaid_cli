@@ -24,22 +24,11 @@ class NessaidCli(CliInterface):
     def __init__(self, grammarset, loop=None, prompt=None,
                  stdin=None, stdout=None, stderr=None, completekey='tab', use_rawinput=True):
 
-        if stdin is not None:
-            self._stdin = stdin
-        else:
-            self._stdin = sys.stdin
+        self._stdin = stdin
+        self._stdout = stdout
+        self._stderr = stderr
 
-        if stdout is not None:
-            self._stdout = stdout
-        else:
-            self._stdout = sys.stdout
-
-        if stderr is not None:
-            self._stderr = stderr
-        else:
-            self._stderr = sys.stderr
-
-        super().__init__(grammarset)
+        super().__init__(grammarset, stdin=stdin, stdout=stdout, stderr=stderr)
 
         self._completekey = completekey
         self._use_rawinput = use_rawinput
@@ -61,6 +50,24 @@ class NessaidCli(CliInterface):
         return self._loop
 
     @property
+    def stdin(self):
+        return self._stdin if self._stdin is not None else sys.stdin
+
+    @property
+    def stdout(self):
+        return self._stdout if self._stdout is not None else sys.stdout
+
+    @property
+    def stderr(self):
+        return self._stderr if self._stderr is not None else sys.stderr
+
+    def print(self, *args):
+        print(*args, file=self.stdout)
+
+    def error(self, *args):
+        print(*args, file=self.stderr)
+
+    @property
     def prompt(self):
         return self._prompt
 
@@ -70,7 +77,7 @@ class NessaidCli(CliInterface):
                 line = ""
             return self._nessaid_tokenizer.parse(line)
         except Exception as e:
-            print("Exception parsing line:", type(e), e)
+            self.error("Exception parsing line:", type(e), e)
             return []
 
     async def get_next_line(self):
@@ -120,7 +127,7 @@ class NessaidCli(CliInterface):
             tokens = self.tokenize(line)
             # print("tokens:", tokens)
         except Exception as e:
-            print("Exception tokenizing input line:", type(e), e)
+            self.error("Exception tokenizing input line:", type(e), e)
             return None
 
         if line and line[-1] in TOKEN_SEPARATORS:
@@ -215,7 +222,7 @@ class NessaidCli(CliInterface):
             return self._completion_matches[state]
 
         except Exception as e:
-            print("Exception matchin input line:", type(e), e)
+            self.error("Exception matchin input line:", type(e), e)
             return None
 
         return None
@@ -237,25 +244,28 @@ class NessaidCli(CliInterface):
         """Exit thr running Cli loop"""
         self._exit_loop = True
 
-    async def exec_line(self, *args):
+    async def exec_args(self, *args):
         line = " ".join(args)
+        return await self.exec_line(line)
+
+    async def exec_line(self, line):
         try:
             tokens = self.tokenize(line)
         except Exception as e:
-            print("Exception tokenizing input line:", type(e), e)
-            print("\n")
-            traceback.print_tb(e.__traceback__)
-            print("\n")
+            self.error("Exception tokenizing input line:", type(e), e)
+            self.error("\n")
+            traceback.print_tb(e.__traceback__, file=self.stderr)
+            self.error("\n")
 
         try:
             arglist = []
             match_output = self.match(tokens, dry_run=False, last_token_complete=True, arglist=arglist)
             self.process_cli_response(tokens, match_output)
         except Exception as e:
-            print("Exception parsing input line:", type(e), e)
-            print("\n")
-            traceback.print_tb(e.__traceback__)
-            print("\n")
+            self.error("Exception parsing input line:", type(e), e)
+            self.error("\n")
+            traceback.print_tb(e.__traceback__, file=self.stderr)
+            self.error("\n")
 
     async def cli_exec_init(self):
         if not self._exec_inited:
@@ -283,10 +293,10 @@ class NessaidCli(CliInterface):
                 try:
                     tokens = self.tokenize(line)
                 except Exception as e:
-                    print("Exception tokenizing input line:", type(e), e)
-                    print("\n")
-                    traceback.print_tb(e.__traceback__)
-                    print("\n")
+                    self.error("Exception tokenizing input line:", type(e), e)
+                    self.error("\n")
+                    traceback.print_tb(e.__traceback__, file=self.stderr)
+                    self.error("\n")
                 else:
                     #print("Tokens:", tokens)
                     pass
@@ -297,14 +307,14 @@ class NessaidCli(CliInterface):
                     self._current_line = None
                     self.process_cli_response(tokens, match_output)
                 except Exception as e:
-                    print("Exception parsing input line:", type(e), e)
-                    print("\n")
-                    traceback.print_tb(e.__traceback__)
-                    print("\n")
+                    self.error("Exception parsing input line:", type(e), e)
+                    self.error("\n")
+                    traceback.print_tb(e.__traceback__, file=self.stderr)
+                    self.error("\n")
         finally:
             self.exit_grammar()
 
     def process_cli_response(self, tokens, cli_response):
         if tokens and cli_response.result != MATCH_SUCCESS:
-            print("Result:", cli_response.result)
-            print("Error:", cli_response.error)
+            self.error("Result:", cli_response.result)
+            self.error("Error:", cli_response.error)
