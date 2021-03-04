@@ -5,145 +5,43 @@
 # file included as part of this package.
 #
 
-import ply.lex as lex
-import ply.yacc as yacc
+from nessaid_cli.lex_yacc_common import NessaidCliLexerCommon, NessaidCliParserCommon, TokenString
 
 
-class NessaidCliTokenizerLexer():
+class NessaidCliTokenizerLexer(NessaidCliLexerCommon):
 
-    states = (
-        ('QUOTE','exclusive'),
-    )
-
-    tokens = (
-        'COLON',
-        'SEMICOLON',
-        'LPAREN',
-        'RPAREN',
-        'LBRACE',
-        'RBRACE',
-        'LBRACKET',
-        'RBRACKET',
-        'IDENTIFIER',
+    tokens = NessaidCliLexerCommon.tokens + (
         'TEXT',
-        'OR',
-        'AND',
-        'OPEN_QUOTE',
-        'CLOSE_QUOTE',
-        'QUOTED_CONTENT',
-        'ESCAPED_CHAR',
-        'NEWLINE',
-        'ESCAPED_NEWLINE',
-        'eof'
     )
-
-    t_LPAREN      = r'\('
-    t_RPAREN      = r'\)'
-    t_LBRACE      = r'\{'
-    t_RBRACE      = r'\}'
-    t_LBRACKET    = r'\['
-    t_RBRACKET    = r'\]'
-    t_IDENTIFIER  = r'[A-Za-z_][-a-zA-Z0-9]*'
-
-    t_OR          = r'\|'
-    t_AND         = r'\&'
-    t_COLON       = r':'
-    t_SEMICOLON   = r';'
-    t_NEWLINE     = r'(\n|\r\n|\r)+'
-
-    t_ignore  = ' \t'
-    t_QUOTE_ignore = ""
-
-
-    def t_INITIAL_OPEN_QUOTE(self, t):
-        r'\"'
-        self.lexer.begin('QUOTE')
-        """
-        print("\n"*2)
-        print("t:", t)
-        print("t.value:", t.value)
-        print("\n"*2)
-        """
-        return t
 
     def t_TEXT(self, t):
         r'([^"\n\\ \t])+'
-        #print("\n"*2)
-        #print("t:", t)
-        #print("t.value:", t.value)
-        #print("\n"*2)
         return t
 
-    def t_QUOTE_QUOTED_CONTENT(self, t):
-        r'([^"\n\\])+'
-        #print("\n"*2)
-        #print("t:", t)
-        #print("t.value:", t.value)
-        #print("\n"*2)
-        return t
-
-    def t_QUOTE_ESCAPED_CHAR(self, t):
-        r'\\([^\n\r])'
-        #print("\n"*2)
-        #print("t:", t)
-        #print("t.value:", t.value)
-        #print("\n"*2)
-        return t
-
-    def t_QUOTE_ESCAPED_NEWLINE(self, t):
-        r'\\(\n|\r\n|\r)+'
-        #print("\n"*2)
-        #print("t:", t)
-        #print("t.value:", t.value)
-        #print("\n"*2)
-        pass
-
-    def t_QUOTE_CLOSE_QUOTE(self, t):
-        r'\"'
-        self.lexer.begin('INITIAL')
-        """
-        print("\n"*2)
-        print("t:", t)
-        print("t.value:", t.value)
-        print("\n"*2)
-        """
-        return t
-
-    def t_eof(self, t):
-        return None
-
-    def t_error(self, t):
-        print("INITIAL: Illegal character '%s'" % t.value[0])
-        t.lexer.skip(1)
-
-    def t_QUOTE_error(self, t):
-        #print(t.value)
-        print("QUOTE: Illegal character '%s'" % t.value[0])
-        t.lexer.skip(1)
-        self.lexer.begin('INITIAL')
+    t_INITIAL_OPEN_QUOTE = NessaidCliLexerCommon.common_OPEN_QUOTE
 
     def __init__(self, filter_special_chars=None):
         self.adjust_token_rules(filter_special_chars)
-        self.lexer = lex.lex(module=self)
+        super().__init__()
 
     def adjust_token_rules(self, filter_chars):
         pass
 
 
-class NessaidCliTokenizer():
+class NessaidCliTokenizer(NessaidCliParserCommon):
 
     tokens = NessaidCliTokenizerLexer.tokens
 
     def __init__(self):
-        self.lexer = NessaidCliTokenizerLexer()
-        self.parser = yacc.yacc(module=self, debug=False, write_tables=False)
+        self._lexer = NessaidCliTokenizerLexer()
+        super().__init__()
 
     def parse(self, input_str):
-        self.lexer.lexer.begin('INITIAL')
+        self.lexer.enter_state(NessaidCliTokenizerLexer.INITIAL_STATE)
         return self.parser.parse(input_str, lexer=self.lexer.lexer)
 
     def p_line_content(self, t):
-        """line_content : input empty
+        """line_content : line empty
                         | unused_token"""
         t0 = t[1]
         t[0] = t0
@@ -163,6 +61,13 @@ class NessaidCliTokenizer():
                         | LBRACE
                         | LBRACKET
                         | LPAREN
+                        | ASSIGN
+                        | COMMA
+                        | FLOAT
+                        | INTEGER
+                        | MULTIPLY
+                        | DOLLAR_VAR_ID
+                        | DOLLAR_NUMBER_ID
                         | OR
                         | RBRACE
                         | RBRACKET
@@ -170,11 +75,6 @@ class NessaidCliTokenizer():
                         | SEMICOLON"""
         print("Syntax error (Unused token) at '%s'" % t.value)
         t[0] = []
-
-    def p_input(self, t):
-        'input : line'
-        t0 = t[1]
-        t[0] = t0
 
     def p_line(self, t):
         """line : line segment
@@ -188,76 +88,50 @@ class NessaidCliTokenizer():
         t[0] = t0
 
     def p_segment(self, t):
-        """segment : TEXT
+        """segment : text
                    | quoted_string
                    | incomplete_quoted_string"""
         t1 = t[1]
         t[0] = t1
 
-    def p_quoted_string(self, t):
-        'quoted_string : incomplete_quoted_string CLOSE_QUOTE'
-        t[0] = t[1] + '"'
-
-    def p_incomplete_quoted_string(self, t):
-        'incomplete_quoted_string : OPEN_QUOTE quote_body'
-        t2 = t[2]
-
-        t2s = t2.split("\\\\")
-
-        replace_patterns = {
-            '\\"': '"',
-            "\\n": "\n",
-            "\\r": "\r",
-            "\\t": "\t",
-        }
-
-        for k, v in replace_patterns.items():
-            t2s = [t.replace(k, v) for t in t2s]
-
-        t2 = "\\".join(t2s)
-
-        t[0] = '"' + t2
-
-    def p_quote_body(self, t):
-        """quote_body : quote_text
-                      | empty"""
+    def p_text(self, t):
+        'text : TEXT'
         t1 = t[1]
-        if t1 is None:
-            t0 = ""
-        else:
-            t0 = t1
-        t[0] = t0
-
-    def p_quote_text(self, t):
-        '''quote_text : quote_text quote_segment
-                      | quote_segment'''
-
-        t1 = t[1]
-        if len(t) == 2:
-            t0 = t1
-        else:
-            t2 = t[2]
-            t0 = t1 + t2
-        t[0] = t0
-
-    def p_quote_segment(self, t):
-        """quote_segment : QUOTED_CONTENT
-                         | ESCAPED_CHAR"""
-        t1 = t[1]
-        # if t1 in ["\\\\", "\\\""]:
-        #     t1 = t1[1:]
-        t[0] = t1
-
-    def p_empty(self, t):
-        'empty :'
-        pass
+        t[0] = TokenString(t1)
 
 def tokenize(input_str):
     parser = NessaidCliTokenizer()
     return parser.parse(input_str)
 
-if __name__ == '__main__':
+
+def main():
     while True:
-        line = input("Test: ")
-        tokens = tokenize(line)
-        print("Tokens:", tokens)
+        try:
+            line = input("Test: ")
+            tokens = tokenize(line)
+            print("Line:", line)
+            print("Tokens:", tokens)
+            print("Tokens Inputs:", [t.input for t in tokens])
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print("Exception:", type(e), e)
+
+
+def token_info():
+
+    while True:
+        try:
+            line = input("Test: ")
+            tokens = tokenize(line)
+            print("Line:", line)
+            print("Line: repr:", repr(line))
+            print("Tokens:", tokens)
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print("Exception:", type(e), e)
+
+
+if __name__ == '__main__':
+    main()
