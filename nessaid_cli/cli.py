@@ -24,10 +24,6 @@ class NessaidCli(CliInterface):
     def __init__(self, grammarset, loop=None, prompt=None,
                  stdin=None, stdout=None, stderr=None, completekey='tab', use_rawinput=True):
 
-        self._stdin = stdin
-        self._stdout = stdout
-        self._stderr = stderr
-
         super().__init__(grammarset, stdin=stdin, stdout=stdout, stderr=stderr)
 
         self._completekey = completekey
@@ -48,18 +44,6 @@ class NessaidCli(CliInterface):
     @property
     def loop(self):
         return self._loop
-
-    @property
-    def stdin(self):
-        return self._stdin if self._stdin is not None else sys.stdin
-
-    @property
-    def stdout(self):
-        return self._stdout if self._stdout is not None else sys.stdout
-
-    @property
-    def stderr(self):
-        return self._stderr if self._stderr is not None else sys.stderr
 
     def print(self, *args):
         print(*args, file=self.stdout)

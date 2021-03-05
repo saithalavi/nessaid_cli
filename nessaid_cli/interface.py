@@ -8,6 +8,7 @@
 import sys
 
 from nessaid_cli.compiler import CompiledGrammarSet
+from nessaid_cli.utils import StdStreamsHolder
 
 from nessaid_cli.tokens import (
     CliToken,
@@ -424,12 +425,14 @@ class ExecContext():
         else:
             pass #print("Exit call: Not found:", id(element), element)
 
-class CliInterface():
+class CliInterface(StdStreamsHolder):
 
     def __init__(self, grammarset, stdin=None, stdout=None, stderr=None):
 
         if not isinstance(grammarset, CompiledGrammarSet):
             raise ValueError("CompiledGrammarSet object expected")
+
+        self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
 
         self._stdin = stdin
         self._stdout = stdout
@@ -439,24 +442,6 @@ class CliInterface():
         self._grammars = grammarset
         self._grammar_stack = []
         self._token_class_map = None
-
-    @property
-    def stdin(self):
-        return self._stdin if self._stdin is not None else sys.stdin
-
-    @property
-    def stdout(self):
-        return self._stdout if self._stdout is not None else sys.stdout
-
-    @property
-    def stderr(self):
-        return self._stderr if self._stderr is not None else sys.stderr
-
-    def print(self, *args):
-        print(*args, file=self.stdout)
-
-    def error(self, *args):
-        print(*args, file=self.stderr)
 
     @property
     def current_grammar(self):

@@ -20,9 +20,9 @@ class NessaidCliTokenizerLexer(NessaidCliLexerCommon):
 
     t_INITIAL_OPEN_QUOTE = NessaidCliLexerCommon.common_OPEN_QUOTE
 
-    def __init__(self, filter_special_chars=None):
+    def __init__(self, filter_special_chars=None, stdin=None, stdout=None, stderr=None):
         self.adjust_token_rules(filter_special_chars)
-        super().__init__()
+        super().__init__(stdin=stdin, stdout=stdout, stderr=stderr)
 
     def adjust_token_rules(self, filter_chars):
         pass
@@ -32,9 +32,9 @@ class NessaidCliTokenizer(NessaidCliParserCommon):
 
     tokens = NessaidCliTokenizerLexer.tokens
 
-    def __init__(self):
-        self._lexer = NessaidCliTokenizerLexer()
-        super().__init__()
+    def __init__(self, stdin=None, stdout=None, stderr=None):
+        self._lexer = NessaidCliTokenizerLexer(stdin=stdin, stdout=stdout, stderr=stderr)
+        super().__init__(stdin=stdin, stdout=stdout, stderr=stderr)
 
     def parse(self, input_str):
         self.lexer.enter_state(NessaidCliTokenizerLexer.INITIAL_STATE)
@@ -45,11 +45,6 @@ class NessaidCliTokenizer(NessaidCliParserCommon):
                         | unused_token"""
         t0 = t[1]
         t[0] = t0
-
-    def p_error(self, t):
-        if t:
-            print("Syntax error at '%s'" % t.value)
-        t[0] = []
 
     def p_unused_token(self, t):
         """unused_token : ESCAPED_NEWLINE

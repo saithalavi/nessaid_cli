@@ -8,16 +8,14 @@
 import ply.lex as lex
 import ply.yacc as yacc
 
+from nessaid_cli.utils import StdStreamsHolder, ExtendedString
 
-class ExtendedString(str):
 
-    def __new__(cls, value, *args, **kwargs):
-    	return super(ExtendedString, cls).__new__(cls, value)
+class CliLexerError(Exception):
+    pass
 
-    def __init__(self, value, *args, **kwargs):
-        self._args = args
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+class CliSyntaxError(Exception):
+    pass
 
 
 class TokenString(ExtendedString):
@@ -35,12 +33,13 @@ class TokenString(ExtendedString):
         return TokenString(str(self) + rhs, input=_input)
 
 
-class NessaidCliLexerCommon():
+class NessaidCliLexerCommon(StdStreamsHolder):
 
     INITIAL_STATE = 'INITIAL'
+    QUOTE_STATE = 'QUOTE'
 
     states = (
-        ('QUOTE','exclusive'),
+        (QUOTE_STATE, 'exclusive'),
     )
 
     tokens = (
@@ -101,8 +100,7 @@ class NessaidCliLexerCommon():
 
     def t_NEWLINE(self, t):
         r'(\n|\r\n|\r)+'
-        count = self.count_newlines(t.value)
-        self.lineno += count
+        self.update_counters(t)
 
     def t_ESCAPED_CHAR(self, t):
         r'\\([^\n\r])'
@@ -110,8 +108,7 @@ class NessaidCliLexerCommon():
 
     def t_ESCAPED_NEWLINE(self, t):
         r'\\(\n|\r\n|\r)'
-        count = self.count_newlines(t.value)
-        self.lineno += count
+        self.update_counters(t)
 
     def t_QUOTE_QUOTED_CONTENT(self, t):
         r'([^"\n\r\\])+'
@@ -119,7 +116,7 @@ class NessaidCliLexerCommon():
 
     def t_QUOTE_CLOSE_QUOTE(self, t):
         r'\"'
-        self.lexer.begin('INITIAL')
+        self.exit_state(NessaidCliLexerCommon.QUOTE_STATE)
         return t
 
     t_QUOTE_NEWLINE = t_NEWLINE
@@ -129,13 +126,22 @@ class NessaidCliLexerCommon():
     t_QUOTE_ESCAPED_NEWLINE = t_ESCAPED_NEWLINE
 
     def t_error(self, t):
-        print("Line: {line} Postion: {position} State: {state}: Illegal character {char}".format(
+
+        def _repr(t):
+            v = t.value[0]
+            if v:
+                v.replace('\n', "'\\n'")
+                v.replace('\t', "'\\t'")
+            return v
+
+        err_msg = "Line: {line} Postion: {position} State: {state}: Illegal character {char}".format(
             line=self.lineno,
             position=self.linepos,
             state=self.state,
-            char=t.value[0]
-        ))
-        t.lexer.skip(1)
+            char=_repr(t.value[0])
+        )
+        self.error(err_msg)
+        raise CliLexerError(err_msg)
 
     t_QUOTE_error = t_error
 
@@ -162,13 +168,12 @@ class NessaidCliLexerCommon():
 
     def common_OPEN_QUOTE(self, t):
         r'\"'
-        self.enter_state('QUOTE')
+        self.enter_state(NessaidCliLexerCommon.QUOTE_STATE)
         return t
 
     def common_COMMENT(self, t):
         r'(/\*(.|\n)*?\*/)|(//.*)|(\#.*)'
-        count = self.count_newlines(t.value)
-        self.lineno += count
+        self.update_counters(t)
 
     @property
     def lexer(self):
@@ -186,23 +191,39 @@ class NessaidCliLexerCommon():
 
     @property
     def linepos(self):
-        return self._linepos
+        try:
+            return self.lexer.lexpos - self._size_till_last_newline
+        except Exception:
+            return 0
 
-    @linepos.setter
-    def linepos(self, n):
-        self._linepos = int(n)
+    def update_counters(self, t):
+        count = self.count_newlines(t.value)
+        self.lineno += count
+        if count:
+            self._size_till_last_newline = t.lexpos + max(t.value.rfind("\r"), t.value.rfind("\n")) + 1
+            print()
 
-    def __init__(self, lineno=1, linepos=0):
+    @property
+    def size_till_last_newline(self):
+        return self._size_till_last_newline
+
+    def __init__(self, lineno=1, linepos=0, stdin=None, stdout=None, stderr=None):
+
+        self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
+
         self._lexer = None
         self._lineno = lineno
-        self._linepos = linepos
+        self._size_till_last_newline = 0
         self._lex_states = []
         self._lexer = lex.lex(module=self)
 
 
-class NessaidCliParserCommon():
+class NessaidCliParserCommon(StdStreamsHolder):
 
-    def __init__(self):
+    def __init__(self, stdin=None, stdout=None, stderr=None):
+
+        self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
+
         self._parser = None
         self._parser = yacc.yacc(module=self, debug=False, write_tables=False)
 
@@ -273,3 +294,21 @@ class NessaidCliParserCommon():
                          | ESCAPED_CHAR"""
         t0 = TokenString(t[1])
         t[0] = t0
+
+    def p_error(self, t):
+
+        def _repr(t):
+            v = t.value if t is not None and hasattr(t, 'value') else t
+            if v:
+                v.replace('\n', "'\\n'")
+                v.replace('\t', "'\\t'")
+            return v
+
+        err_msg = "Line: {line} Postion: {position} State: {state}: Syntax Error at: {token}".format(
+            line=self.lexer.lineno,
+            position=self.lexer.linepos,
+            state=self.lexer.state,
+            token=_repr(t))
+
+        self.error(err_msg)
+        raise CliSyntaxError(err_msg)
