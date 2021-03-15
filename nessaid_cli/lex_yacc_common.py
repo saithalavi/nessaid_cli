@@ -33,6 +33,18 @@ class TokenString(ExtendedString):
         return TokenString(str(self) + rhs, input=_input)
 
 
+class DollarNumber(ExtendedString):
+
+    def __init__(self, value):
+        super().__init__(value)
+
+
+class DollarVariable(ExtendedString):
+
+    def __init__(self, value):
+        super().__init__(value)
+
+
 class NessaidCliLexerCommon(StdStreamsHolder):
 
     INITIAL_STATE = 'INITIAL'
@@ -126,6 +138,7 @@ class NessaidCliLexerCommon(StdStreamsHolder):
     t_QUOTE_ESCAPED_NEWLINE = t_ESCAPED_NEWLINE
 
     def t_error(self, t):
+        self.update_counters(t)
 
         def _repr(t):
             v = t.value[0]
@@ -201,7 +214,6 @@ class NessaidCliLexerCommon(StdStreamsHolder):
         self.lineno += count
         if count:
             self._size_till_last_newline = t.lexpos + max(t.value.rfind("\r"), t.value.rfind("\n")) + 1
-            print()
 
     @property
     def size_till_last_newline(self):
@@ -225,7 +237,7 @@ class NessaidCliParserCommon(StdStreamsHolder):
         self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
 
         self._parser = None
-        self._parser = yacc.yacc(module=self, debug=False, write_tables=False)
+        self._parser = yacc.yacc(module=self, debug=True, write_tables=True)
 
     @property
     def lexer(self):
@@ -294,6 +306,40 @@ class NessaidCliParserCommon(StdStreamsHolder):
                          | ESCAPED_CHAR"""
         t0 = TokenString(t[1])
         t[0] = t0
+
+    def p_number(self, t):
+        """number : integer
+                  | float"""
+        number = t[1]
+        t[0] = number
+
+    def p_integer(self, t):
+        """integer : INTEGER"""
+        int_str =  t[1]
+        integer = int(int_str)
+        t[0] = integer
+
+    def p_float(self, t):
+        """float : FLOAT"""
+        float_str = t[1]
+        float_val = float(float_str)
+        t[0] = float_val
+
+    def p_dollar_id(self, t):
+        """dollar_id : dollar_name
+                     | dollar_number"""
+        dollar_id = t[1]
+        t[0] = dollar_id
+
+    def p_dollar_name(self, t):
+        'dollar_name : DOLLAR_VAR_ID'
+        dollar_name = t[1]
+        t[0] = DollarVariable(dollar_name)
+
+    def p_dollar_number(self, t):
+        'dollar_number : DOLLAR_NUMBER_ID'
+        dollar_number = t[1]
+        t[0] = DollarNumber(dollar_number)
 
     def p_error(self, t):
 

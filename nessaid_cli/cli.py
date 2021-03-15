@@ -45,12 +45,6 @@ class NessaidCli(CliInterface):
     def loop(self):
         return self._loop
 
-    def print(self, *args):
-        print(*args, file=self.stdout)
-
-    def error(self, *args):
-        print(*args, file=self.stderr)
-
     @property
     def prompt(self):
         return self._prompt
@@ -75,9 +69,9 @@ class NessaidCli(CliInterface):
         else:
 
             def _readline():
-                self._stdout.write(self.prompt)
-                self._stdout.flush()
-                line = self._stdin.readline()
+                self.stdout.write(self.prompt)
+                self.stdout.flush()
+                line = self.stdin.readline()
                 if not len(line):
                     line = ""
                 else:
@@ -268,7 +262,8 @@ class NessaidCli(CliInterface):
             await self.preloop()
             await self.cli_exec_init()
             if intro is not None:
-                self._stdout.write(str(intro)+"\n")
+                self.stdout.write(str(intro)+"\n")
+                self.stdout.flush()
 
             while not self._exit_loop:
                 line = await self.get_next_line()

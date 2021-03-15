@@ -20,32 +20,6 @@ MATCH_AMBIGUOUS = 'ambigous'
 TOO_MANY_COMPLETIONS = -1
 
 
-class TokenClassDef():
-
-    def __init__(self, classname, arglist):
-        self._classname = classname
-        self._arglist = arglist
-
-    @property
-    def classname(self):
-        return self._classname
-
-    @property
-    def arglist(self):
-        return self._arglist
-
-    def as_dict(self):
-        return {
-            "classname": self._classname,
-            "arglist": self._arglist
-        }
-
-    @staticmethod
-    def from_dict(d):
-        elem = TokenClassDef(d["classname"], d["arglist"])
-        return elem
-
-
 class CliToken():
 
     def __init__(self, name):

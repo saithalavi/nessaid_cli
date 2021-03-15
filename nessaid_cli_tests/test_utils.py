@@ -7,6 +7,7 @@
 
 import sys
 from io import StringIO
+from contextlib import contextmanager
 
 
 @contextmanager

@@ -68,7 +68,7 @@ class NessaidCliTokenizer(NessaidCliParserCommon):
                         | RBRACKET
                         | RPAREN
                         | SEMICOLON"""
-        print("Syntax error (Unused token) at '%s'" % t.value)
+        self.error("Syntax error (Unused token) at '%s'" % t.value)
         t[0] = []
 
     def p_line(self, t):

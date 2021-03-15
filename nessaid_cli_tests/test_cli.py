@@ -9,7 +9,6 @@ import sys
 import inspect
 import asyncio
 import unittest
-from contextlib import contextmanager
 
 from nessaid_cli.cmd import NessaidCmd
 from nessaid_cli.tokenizer.tokenizer import NessaidCliTokenizer
