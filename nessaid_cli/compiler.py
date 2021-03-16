@@ -466,12 +466,17 @@ class NessaidCliParser(NessaidCliParserCommon):
 
     def p_basic_types(self, t):
         """basic_types : number
-                       | quoted_string
+                       | string_object
                        | boolean_true
                        | boolean_false
                        | none_object"""
         arg = t[1]
         t[0] = arg
+
+    def p_string_object(self, t):
+        """string_object : quoted_string"""
+        arg = t[1]
+        t[0] = arg[1:-1]
 
     def p_boolean_true(self, t):
         """boolean_true : TRUE"""
@@ -605,7 +610,7 @@ class NessaidCliParser(NessaidCliParserCommon):
         t[0] = param_id
 
     def p_parameter_value(self, t):
-        """parameter_value : quoted_string
+        """parameter_value : string_object
                            | dollar_name
                            | number"""
         parameter_value = t[1]

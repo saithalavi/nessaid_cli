@@ -6,11 +6,12 @@ from nessaid_cli.tokens import (
     RangedIntToken,
     BooleanToken,
     RangedStringToken,
+    AlternativeStringsToken
 )
 
 class Cmd1(NessaidCmd):
     """
-    token STRING_TOKEN StringToken();
+    token STRING_TOKEN StringToken(), alt AlternativeStringsToken("ab", "a b", "a\\b", "a\\\\\\b", "a\\\\b");
     token BOOLEAN BooleanToken();
     token RANGED_STRING_TOKEN_1 RangedStringToken(5, 10);
     token RANGED_INT_TOKEN_1 RangedIntToken(0, 100);
@@ -26,7 +27,16 @@ class Cmd1(NessaidCmd):
             RangedStringToken,
             RangedIntToken,
             BooleanToken,
+            AlternativeStringsToken
         ]
+
+    def do_backslash(self, var):
+        """
+        "back-slash"
+        alt
+        <<$var = $2;>>
+        """
+        print("Var:", var)
 
     def do_basic_1(self, cli_input, cli_output):
         """

@@ -11,6 +11,8 @@ import fnmatch
 import platform
 from pathlib import Path
 
+from nessaid_cli.lex_yacc_common import TokenString
+
 
 MATCH_SUCCESS = 'success'
 MATCH_FAILURE = 'failure'
@@ -83,11 +85,23 @@ class AlternativeStringsToken(CliToken):
         if (isinstance(alternatives, list) or
             isinstance(alternatives, set) or
             isinstance(alternatives, tuple)):
-            self._alternatives = list(alternatives)
+            _alternatives = list(alternatives)
         elif args:
-            self._alternatives = [alternatives] + list(args)
+            _alternatives = [alternatives] + list(args)
         else:
-            self._alternatives = []
+            _alternatives = []
+        special_chars = [" ", "\t", "\n", "\r", "\\"]
+        self._alternatives = []
+        for alt in _alternatives:
+            need_quotes = False
+            for c in special_chars:
+                if c in alt:
+                    need_quotes = True
+                    break
+            if need_quotes:
+                self._alternatives.append(TokenString('"' + alt + '"', input=alt))
+            else:
+                self._alternatives.append(TokenString(alt))
 
     @property
     def helpstring(self):
@@ -105,6 +119,12 @@ class AlternativeStringsToken(CliToken):
             if token_input and e.startswith(token_input):
                 completions.add(e)
         return len(completions), list(completions)
+
+    def get_value(self, match_string=None):
+        v = super().get_value(match_string)
+        if isinstance(v, TokenString):
+            return v.input
+        return v
 
     def match(self, token_input):
         if token_input and token_input in  self._alternatives:
