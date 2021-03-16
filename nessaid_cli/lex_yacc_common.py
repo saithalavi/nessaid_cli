@@ -78,6 +78,7 @@ class NessaidCliLexerCommon(StdStreamsHolder):
         'QUOTED_CONTENT',
         'CLOSE_QUOTE',
         'ESCAPED_CHAR',
+        'SINGLE_BACKSLASH',
         'ESCAPED_NEWLINE',
         'eof',
     )
@@ -131,11 +132,16 @@ class NessaidCliLexerCommon(StdStreamsHolder):
         self.exit_state(NessaidCliLexerCommon.QUOTE_STATE)
         return t
 
-    t_QUOTE_NEWLINE = t_NEWLINE
+    def t_QUOTE_NEWLINE(self, t):
+        r'(\n|\r\n|\r)+'
+        self.update_counters(t)
+        return t
 
     t_QUOTE_ESCAPED_CHAR = t_ESCAPED_CHAR
 
     t_QUOTE_ESCAPED_NEWLINE = t_ESCAPED_NEWLINE
+
+    t_QUOTE_SINGLE_BACKSLASH = r'\\'
 
     def t_error(self, t):
         self.update_counters(t)
@@ -303,7 +309,9 @@ class NessaidCliParserCommon(StdStreamsHolder):
 
     def p_quote_segment(self, t):
         """quote_segment : QUOTED_CONTENT
-                         | ESCAPED_CHAR"""
+                         | NEWLINE
+                         | ESCAPED_CHAR
+                         | SINGLE_BACKSLASH"""
         t0 = TokenString(t[1])
         t[0] = t0
 

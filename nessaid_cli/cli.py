@@ -151,20 +151,31 @@ class NessaidCli(CliInterface):
                 if match_output.last_token:
                     tok_input = match_output.last_token[0]
                     tok_replacement = match_output.last_token[1]
+
+                    if tok_input == tokens[-1]:
+                        line_tok = tokens[-1].input
+                        if tok_replacement.startswith('"'):
+                            line_repl = tok_replacement.replace("\\", "\\\\")
+                        else:
+                            line_repl = tok_replacement
+                    else:
+                        line_tok = tok_input
+                        line_repl = tok_replacement
+
                     if tok_replacement and cli_startswith(tok_replacement, tok_input):
                         if tok_input != tok_replacement:
                             if line == self._current_line:
-                                idx, reps = cli_rindex(line, tok_input)
+                                idx, reps = cli_rindex(line, line_tok)
                                 replace_len = len(line) - idx - reps
-                                readline.insert_text(tok_replacement[replace_len:])
+                                readline.insert_text(line_repl[replace_len:])
                                 self._suggestion_shown = False
                                 return None
                             elif self._suggestion_shown and self._current_line and len(line) > len(self._current_line):
                                 if cli_startswith(line, self._current_line):
-                                    idx, reps = cli_rindex(line, tok_input)
+                                    idx, reps = cli_rindex(line, line_tok)
                                     replace_len = len(line) - idx - reps
-                                    readline.insert_text(tok_replacement[replace_len:])
-                                    if len(completions) == 1 and completions[0] == tok_replacement:
+                                    readline.insert_text(line_repl[replace_len:])
+                                    if len(completions) == 1 and completions[0] == line_repl:
                                         readline.insert_text(DEFAULT_SEPARATOR)
                                     self._suggestion_shown = False
                                     return None
@@ -210,11 +221,31 @@ class NessaidCli(CliInterface):
         pass
 
     def set_completion_tokens(self, tokens):
-        if len(tokens) > 1:
+        comp_tokens = []
+        char_repl_maps = {
+            "\\": "\\\\",
+            "\n": "\\n",
+            "\t": "\\t",
+            '"': '\\"'
+        }
+        for tok in tokens:
+            if tok.startswith('"'):
+                comp_token = tok[1:]
+                if tok.endswith('"'):
+                    comp_token = comp_token[:-1]
+                    e = '"'
+                else:
+                    e = ""
+                for r, repl in char_repl_maps.items():
+                    comp_token = comp_token.replace(r, repl)
+                comp_tokens.append('"' + comp_token + e)
+            else:
+                comp_tokens.append(tok)
+        if len(comp_tokens) > 1:
             if os.name == 'nt':
-                tokens = sorted(tokens)
-                tokens = [tokens[0]] + ['\n' + t for t in tokens[1:]]
-        self._completion_matches = tokens + [" "]
+                comp_tokens = sorted(comp_tokens)
+                comp_tokens = [comp_tokens[0]] + ['\n' + t for t in comp_tokens[1:]]
+        self._completion_matches = comp_tokens + [" "]
 
     async def preloop(self):
         pass

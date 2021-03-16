@@ -11,7 +11,7 @@ from nessaid_cli.tokens import (
 
 class Cmd1(NessaidCmd):
     """
-    token STRING_TOKEN StringToken(), alt AlternativeStringsToken("ab", "a b", "a\\b", "a\\\\\\b", "a\\\\b");
+    token STRING_TOKEN StringToken(), alt AlternativeStringsToken("ab", "a b", "a\\b", "a\\\\\\b", "a\\\\b", "b\t", "c\nc");
     token BOOLEAN BooleanToken();
     token RANGED_STRING_TOKEN_1 RangedStringToken(5, 10);
     token RANGED_INT_TOKEN_1 RangedIntToken(0, 100);
