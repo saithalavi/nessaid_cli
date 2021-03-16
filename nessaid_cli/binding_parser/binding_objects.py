@@ -76,9 +76,6 @@ class BindingStrObject(str):
     def __repr__(self):
         return '"' + self + '"'
 
-    def __str__(self):
-        return '"' + self + '"'
-
 
 class BindingVariable():
 

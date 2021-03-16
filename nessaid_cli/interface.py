@@ -678,7 +678,8 @@ class CliInterface(StdStreamsHolder):
                                     tok_index += 1
                                 res.matched_values = match_values
                                 root_arglist = self.execute_success_sequence(matching_sequences[0], match_values, args)
-                                for i in range(len(root_arglist)):
+                                arglen = len(arglist)
+                                for i in range(arglen):
                                     arglist[i] = root_arglist.pop(0)
                                 res.result = MATCH_SUCCESS
                             else:

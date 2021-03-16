@@ -114,7 +114,8 @@ class NessaidCli(CliInterface):
             last_token_complete = False
 
         try:
-            match_output = self.match(tokens, dry_run=True, last_token_complete=last_token_complete)
+            input_tokens = [str(t) for t in tokens]
+            match_output = self.match(input_tokens, dry_run=True, last_token_complete=last_token_complete)
             completions = []
 
             def cli_rindex(string, substring):
@@ -237,7 +238,8 @@ class NessaidCli(CliInterface):
 
         try:
             arglist = []
-            match_output = self.match(tokens, dry_run=False, last_token_complete=True, arglist=arglist)
+            input_tokens = [str(t) for t in tokens]
+            match_output = self.match(input_tokens, dry_run=False, last_token_complete=True, arglist=arglist)
             self.process_cli_response(tokens, match_output)
         except Exception as e:
             self.error("Exception parsing input line:", type(e), e)
@@ -282,7 +284,8 @@ class NessaidCli(CliInterface):
 
                 try:
                     arglist = [1, 1.5, "nessaid_cli"]
-                    match_output = self.match(tokens, dry_run=False, last_token_complete=True, arglist=arglist)
+                    input_tokens = [str(t) for t in tokens]
+                    match_output = self.match(input_tokens, dry_run=False, last_token_complete=True, arglist=arglist)
                     self._current_line = None
                     self.process_cli_response(tokens, match_output)
                 except Exception as e:

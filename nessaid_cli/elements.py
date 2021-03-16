@@ -729,7 +729,7 @@ def map_grammar_arguments(grammar_name, parameter_list, arglist):
             has_kwarg = True
             for param in param_list:
                 if arg.param_name == param:
-                    param_map[arg.param_name] = arg.value
+                    param_map[arg.param_name] = arg
                     param_list.remove(param)
                     break
             else:
@@ -745,7 +745,7 @@ def map_grammar_arguments(grammar_name, parameter_list, arglist):
         if param.has_def_value:
             param_map[str(param)] = CliArgument(param.defvalue)
         else:
-            param_map[str(param)] = None
+            param_map[str(param)] = CliArgument(None)
 
     return param_map
 

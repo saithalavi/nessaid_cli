@@ -1,40 +1,107 @@
-# Copyright 2021 by Saithalavi M, saithalavi@gmail.com
-# All rights reserved.
-# This file is part of the Nessaid CLI Framework, nessaid_cli python package
-# and is released under the "MIT License Agreement". Please see the LICENSE
-# file included as part of this package.
-#
-
-import sys
-from nessaid_cli.compiler import compile
-from nessaid_cli.cli import NessaidCli
+from nessaid_cli.cmd import NessaidCmd
+from nessaid_cli.tokenizer.tokenizer import NessaidCliTokenizer
 
 from nessaid_cli.tokens import (
+    StringToken,
     RangedIntToken,
-    RangedStringToken
+    BooleanToken,
+    RangedStringToken,
 )
 
-class TestCli(NessaidCli):
+class Cmd1(NessaidCmd):
+    """
+    token STRING_TOKEN StringToken();
+    token BOOLEAN BooleanToken();
+    token RANGED_STRING_TOKEN_1 RangedStringToken(5, 10);
+    token RANGED_INT_TOKEN_1 RangedIntToken(0, 100);
+    token RANGED_INT_TOKEN_2 RangedIntToken(1, 1000);
+    token RANGED_INT_TOKEN_3 RangedIntToken(-100, -1);
+    token RANGED_INT_TOKEN_4 RangedIntToken(-100, 100);
+    token RANGED_INT_TOKEN_5 RangedIntToken(-100, 0);
+    """
 
     def get_token_classes(self):
-        """Method to override.
-        It should return the list of token classes being used"""
-        return [RangedIntToken, RangedStringToken]
+        return [
+            StringToken,
+            RangedStringToken,
+            RangedIntToken,
+            BooleanToken,
+        ]
 
-    def exit(self):
-        """This will be called from exit command of the CLI grammar"""
-        self.exit_loop()
+    def do_basic_1(self, cli_input, cli_output):
+        """
+        "input" << $cli_input = $1; $cli_output = "output"; >>
+        """
+        print("input:", cli_input)
+        print("output:", cli_output)
+
+    def do_types_1(self, cli_input, cli_output):
+        """
+        "type"
+        (
+            (
+                "string"
+                STRING_TOKEN
+                << $cli_input = $1; $cli_output = $2; >>
+            )
+            |
+            (
+                "ranged-string"
+                RANGED_STRING_TOKEN_1
+                << $cli_input = $1; $cli_output = $2; >>
+            )
+            |
+            (
+                "boolean"
+                BOOLEAN
+                << $cli_input = $1; $cli_output = $2; >>
+            )
+            |
+            (
+                "int"
+                RANGED_INT_TOKEN_1
+                << $cli_input = $1; $cli_output = $2; >>
+            )
+            |
+            (
+                "bigger-int"
+                RANGED_INT_TOKEN_2
+                << $cli_input = $1; $cli_output = $2; >>
+            )
+            |
+            (
+                "negative-int"
+                RANGED_INT_TOKEN_3
+                << $cli_input = $1; $cli_output = $2; >>
+            )
+            |
+            (
+                "negative-or-positive"
+                RANGED_INT_TOKEN_4
+                << $cli_input = $1; $cli_output = $2; >>
+            )
+            |
+            (
+                "negative-or-zero"
+                RANGED_INT_TOKEN_5
+                << $cli_input = $1; $cli_output = $2; >>
+            )
+        )
+        """
+        print("Input:", cli_input)
+        print("Type:", type(cli_output))
+        print("Output:", cli_output)
 
 
+import sys
 if __name__ == '__main__':
-    with open("examples\\test_input.g") as fd:
-        inp_str = fd.read()
-        grammar_set = compile(inp_str)
-
-    cli = TestCli(grammar_set, prompt="# ")
+    cmd = Cmd1(prompt="nessaid-cmd # ", show_grammar=True)
+    #show_grammar will print the generated grammar specification
     try:
-        cli.loop.run_until_complete(cli.cmdloop('test_grammar', intro="Starting Nessaid CLI Demo"))
-        # 'test_grammar' above is the grammar to load with the CLI, part of test_input.g
+        cmd.loop.run_until_complete(cmd.cmdloop(intro="Starting Nessaid CMD Demo"))
     except KeyboardInterrupt:
         sys.exit(0)
-    sys.exit(1)
+    except Exception as e:
+        print("Exception in cmdloop:", e)
+        sys.exit(1)
+    sys.exit(0)
