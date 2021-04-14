@@ -321,9 +321,6 @@ class TestCli(NessaidCli):
         It should return the list of token classes being used"""
         return [RangedIntToken, RangedStringToken]
 
-    def print(self, *args):
-        print("External function:", *args)
-
     def exit(self):
         """This will be called from exit command of the CLI grammar"""
         self.exit_loop()
@@ -455,9 +452,6 @@ class TestCmd(NessaidCmd):
         """Method to override.
         It should return the list of token classes being used"""
         return [RangedIntToken, RangedStringToken]
-
-    def print(self, *args):
-        print("External function:", *args)
 
     def do_command1(self, number):
         r"""
