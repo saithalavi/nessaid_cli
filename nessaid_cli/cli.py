@@ -15,7 +15,7 @@ import rlcompleter
 
 from nessaid_cli.interface import CliInterface
 from nessaid_cli.elements import EndOfInpuToken
-from nessaid_cli.tokenizer.tokenizer import NessaidCliTokenizer
+from nessaid_cli.tokenizer.tokenizer import NessaidCliTokenizer, TokenizerException
 from nessaid_cli.tokens import CliToken, MATCH_SUCCESS, MATCH_PARTIAL, MATCH_AMBIGUOUS
 
 
@@ -23,10 +23,6 @@ class NessaidCli(CliInterface):
 
     def __init__(self, grammarset, loop=None, prompt=None,
                  stdin=None, stdout=None, stderr=None, completekey='tab', use_rawinput=True):
-
-        self._stdin = stdin
-        self._stdout = stdout
-        self._stderr = stderr
 
         super().__init__(grammarset, stdin=stdin, stdout=stdout, stderr=stderr)
 
@@ -50,24 +46,6 @@ class NessaidCli(CliInterface):
         return self._loop
 
     @property
-    def stdin(self):
-        return self._stdin if self._stdin is not None else sys.stdin
-
-    @property
-    def stdout(self):
-        return self._stdout if self._stdout is not None else sys.stdout
-
-    @property
-    def stderr(self):
-        return self._stderr if self._stderr is not None else sys.stderr
-
-    def print(self, *args):
-        print(*args, file=self.stdout)
-
-    def error(self, *args):
-        print(*args, file=self.stderr)
-
-    @property
     def prompt(self):
         return self._prompt
 
@@ -75,10 +53,14 @@ class NessaidCli(CliInterface):
         try:
             if line == '\n':
                 line = ""
-            return self._nessaid_tokenizer.parse(line)
+
+            try:
+                tokens = self._nessaid_tokenizer.parse(line)
+                return True, None, tokens
+            except TokenizerException as e:
+                return False, "Invalid input: {}".format(line), []
         except Exception as e:
-            self.error("Exception parsing line:", type(e), e)
-            return []
+            return False, "Exception parsing line: {}: {}".format(type(e), e)
 
     async def get_next_line(self):
         if self._cmdqueue:
@@ -91,9 +73,9 @@ class NessaidCli(CliInterface):
         else:
 
             def _readline():
-                self._stdout.write(self.prompt)
-                self._stdout.flush()
-                line = self._stdin.readline()
+                self.stdout.write(self.prompt)
+                self.stdout.flush()
+                line = self.stdin.readline()
                 if not len(line):
                     line = ""
                 else:
@@ -124,10 +106,12 @@ class NessaidCli(CliInterface):
         line = readline.get_line_buffer()
 
         try:
-            tokens = self.tokenize(line)
-            # print("tokens:", tokens)
+            success, error, tokens = self.tokenize(line)
+            if not success:
+                self.set_completion_tokens(["Failure tokenizing input line: {}".format(line)])
+                return self._completion_matches[state]
         except Exception as e:
-            self.error("Exception tokenizing input line:", type(e), e)
+            self.set_completion_tokens(["Exception tokenizing input line: {}: {}".format(type(e), e)])
             return None
 
         if line and line[-1] in TOKEN_SEPARATORS:
@@ -136,18 +120,9 @@ class NessaidCli(CliInterface):
             last_token_complete = False
 
         try:
-            match_output = self.match(tokens, dry_run=True, last_token_complete=last_token_complete)
+            input_tokens = [str(t) for t in tokens]
+            match_output = self.match(input_tokens, dry_run=True, last_token_complete=last_token_complete)
             completions = []
-
-            def cli_rindex(string, substring):
-                try:
-                    return string.rindex(substring), 0
-                except Exception:
-                    if match_output.case_insensitive:
-                        string = string.lower()
-                        substring = substring.lower()
-                    n = substring.count("\\")
-                    return string.rindex(substring.replace("\\", "\\\\")), n
 
             def cli_startswith(string, substring):
                 if string.startswith(substring):
@@ -172,18 +147,19 @@ class NessaidCli(CliInterface):
                 if match_output.last_token:
                     tok_input = match_output.last_token[0]
                     tok_replacement = match_output.last_token[1]
+
                     if tok_replacement and cli_startswith(tok_replacement, tok_input):
                         if tok_input != tok_replacement:
                             if line == self._current_line:
-                                idx, reps = cli_rindex(line, tok_input)
-                                replace_len = len(line) - idx - reps
+                                idx = line.rindex(tok_input)
+                                replace_len = len(line) - idx
                                 readline.insert_text(tok_replacement[replace_len:])
                                 self._suggestion_shown = False
                                 return None
                             elif self._suggestion_shown and self._current_line and len(line) > len(self._current_line):
                                 if cli_startswith(line, self._current_line):
-                                    idx, reps = cli_rindex(line, tok_input)
-                                    replace_len = len(line) - idx - reps
+                                    idx = line.rindex(tok_input)
+                                    replace_len = len(line) - idx
                                     readline.insert_text(tok_replacement[replace_len:])
                                     if len(completions) == 1 and completions[0] == tok_replacement:
                                         readline.insert_text(DEFAULT_SEPARATOR)
@@ -222,8 +198,8 @@ class NessaidCli(CliInterface):
             return self._completion_matches[state]
 
         except Exception as e:
-            self.error("Exception matchin input line:", type(e), e)
-            return None
+            self.set_completion_tokens(["Exception matchinsinput line: {}: {}".format(type(e), e)])
+            return self._completion_matches[state]
 
         return None
 
@@ -231,11 +207,34 @@ class NessaidCli(CliInterface):
         pass
 
     def set_completion_tokens(self, tokens):
-        if len(tokens) > 1:
+        """
+        comp_tokens = []
+        char_repl_maps = {
+            "\\": "\\\\",
+            "\n": "\\n",
+            "\t": "\\t",
+            '"': '\\"'
+        }
+        for tok in tokens:
+            if tok.startswith('"'):
+                comp_token = tok[1:]
+                if tok.endswith('"'):
+                    comp_token = comp_token[:-1]
+                    e = '"'
+                else:
+                    e = ""
+                for r, repl in char_repl_maps.items():
+                    comp_token = comp_token.replace(r, repl)
+                comp_tokens.append('"' + comp_token + e)
+            else:
+                comp_tokens.append(tok)
+                """
+        comp_tokens = tokens
+        if len(comp_tokens) > 1:
             if os.name == 'nt':
-                tokens = sorted(tokens)
-                tokens = [tokens[0]] + ['\n' + t for t in tokens[1:]]
-        self._completion_matches = tokens + [" "]
+                comp_tokens = sorted(comp_tokens)
+                comp_tokens = [comp_tokens[0]] + ['\n' + t for t in comp_tokens[1:]]
+        self._completion_matches = comp_tokens + [" "]
 
     async def preloop(self):
         pass
@@ -250,7 +249,9 @@ class NessaidCli(CliInterface):
 
     async def exec_line(self, line):
         try:
-            tokens = self.tokenize(line)
+            success, error, tokens = self.tokenize(line)
+            if not success:
+                self.error("Failure tokenizing input line:", error)
         except Exception as e:
             self.error("Exception tokenizing input line:", type(e), e)
             self.error("\n")
@@ -259,7 +260,8 @@ class NessaidCli(CliInterface):
 
         try:
             arglist = []
-            match_output = self.match(tokens, dry_run=False, last_token_complete=True, arglist=arglist)
+            input_tokens = [str(t) for t in tokens]
+            match_output = self.match(input_tokens, dry_run=False, last_token_complete=True, arglist=arglist)
             self.process_cli_response(tokens, match_output)
         except Exception as e:
             self.error("Exception parsing input line:", type(e), e)
@@ -284,14 +286,17 @@ class NessaidCli(CliInterface):
             await self.preloop()
             await self.cli_exec_init()
             if intro is not None:
-                self._stdout.write(str(intro)+"\n")
+                self.stdout.write(str(intro)+"\n")
+                self.stdout.flush()
 
             while not self._exit_loop:
                 line = await self.get_next_line()
                 self._current_line = line
                 #print("Input:", line)
                 try:
-                    tokens = self.tokenize(line)
+                    success, error, tokens = self.tokenize(line)
+                    if not success:
+                        self.error("Failure tokenizing input line:", error)
                 except Exception as e:
                     self.error("Exception tokenizing input line:", type(e), e)
                     self.error("\n")
@@ -302,8 +307,9 @@ class NessaidCli(CliInterface):
                     pass
 
                 try:
-                    arglist = [1, 1.5, "nessaid_cli"]
-                    match_output = self.match(tokens, dry_run=False, last_token_complete=True, arglist=arglist)
+                    arglist = []
+                    input_tokens = [str(t) for t in tokens]
+                    match_output = self.match(input_tokens, dry_run=False, last_token_complete=True, arglist=arglist)
                     self._current_line = None
                     self.process_cli_response(tokens, match_output)
                 except Exception as e:

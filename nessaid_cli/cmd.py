@@ -65,6 +65,11 @@ class NessaidCmd(NessaidCli):
         :param cli_nargs: Number of arguments the generated Cmd handlers should have.
         :param show_grammar: print the generated grammar before the Cmd prompt.
         """
+
+        self._stdin = stdin
+        self._stdout = stdout
+        self._stderr = stderr
+
         self.execute_line = self.exec_line
         self.execute_args = self.exec_args
         grammar_text = self.__doc__ if self.__doc__ else ""
@@ -98,7 +103,7 @@ class NessaidCmd(NessaidCli):
 
         if grammar_alternatives:
             root_grammar_name = self.generate_root_grammar_name()
-            root_grammar = "\n\n    {grammar_name}[]:\n".format(grammar_name=root_grammar_name)
+            root_grammar = "\n\n    {grammar_name}[{argstring}]:\n".format(grammar_name=root_grammar_name, argstring=argstring)
             root_grammar += "      " + "\n      |\n      ".join(grammar_alternatives)
             root_grammar += "\n      ;\n"
 

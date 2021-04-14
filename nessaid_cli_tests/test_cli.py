@@ -1,9 +1,14 @@
+# Copyright 2021 by Saithalavi M, saithalavi@gmail.com
+# All rights reserved.
+# This file is part of the Nessaid CLI Framework, nessaid_cli python package
+# and is released under the "MIT License Agreement". Please see the LICENSE
+# file included as part of this package.
+#
+
 import sys
 import inspect
 import asyncio
 import unittest
-from io import StringIO
-from contextlib import contextmanager
 
 from nessaid_cli.cmd import NessaidCmd
 from nessaid_cli.tokenizer.tokenizer import NessaidCliTokenizer
@@ -15,16 +20,8 @@ from nessaid_cli.tokens import (
     RangedStringToken,
 )
 
+from nessaid_cli_tests.test_utils import captured_output
 
-@contextmanager
-def captured_output():
-    new_out, new_err = StringIO(), StringIO()
-    old_out, old_err = sys.stdout, sys.stderr
-    try:
-        sys.stdout, sys.stderr = new_out, new_err
-        yield sys.stdout, sys.stderr
-    finally:
-        sys.stdout, sys.stderr = old_out, old_err
 
 class Cmd1(NessaidCmd):
     """
@@ -148,6 +145,7 @@ class CmdTest1(unittest.TestCase):
     def do_test_type_positive(self, python_type, cli_prefixes, cli_type, cli_types, type_inputs):
         loop = asyncio.get_event_loop()
         cmd = Cmd1(prompt="# ")
+
         cases = []
         count = 0
 
@@ -251,10 +249,12 @@ class CmdTest1(unittest.TestCase):
                 ('asdfgh', 'asdfgh'),
                 ('"asdfgh"', 'asdfgh'),
                 ('"type string"', 'type string'),
-                ('"type\\nstring"', 'type\nstring'),
-                ('"type\\tstring"', 'type\tstring'),
-                ('"type\\string"', 'type\\string'),
-                ('"type\\\\string"', 'type\\string'),
+                (r'"type\nstring"', 'type\nstring'),
+                (r'"type\\nstring"', 'type\\nstring'),
+                (r'"type\tstring"', 'type\tstring'),
+                (r'"type\\tstring"', 'type\\tstring'),
+                (r'"type\\string"', 'type\\string'),
+                (r'"type\\\\string"', 'type\\\\string'),
                 ('""', ''),
                 ('12345', '12345'),
                 ('"12345"', '12345'),

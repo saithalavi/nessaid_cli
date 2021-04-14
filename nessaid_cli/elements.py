@@ -6,6 +6,103 @@
 #
 
 from nessaid_cli.tokens import CliToken, MATCH_FAILURE
+from nessaid_cli.lex_yacc_common import DollarVariable
+from nessaid_cli.utils import ExtendedString
+
+
+class CliParameter(ExtendedString):
+
+    def __init__(self, value, defvalue=None, has_def_value=False):
+        if type(has_def_value) is not bool:
+            raise AttributeError("Attribute has_def_value should be Boolean")
+        super().__init__(value, defvalue=defvalue, has_def_value=has_def_value)
+
+    def __repr__(self):
+        if not self.has_def_value:
+            return super().__repr__()
+        else:
+            return "{}={}".format(str(self), self.defvalue)
+
+    @property
+    def name(self):
+        return str(self)
+
+class CliArgument():
+
+    def __init__(self, value, param_name=None):
+        if param_name is not None:
+            if type(param_name) is not DollarVariable:
+                raise AttributeError("Attribute param_name should be DollarVariable")
+        self._value = value
+        self._param_name = param_name
+
+    @property
+    def value(self):
+        return self._value
+
+    @property
+    def param_name(self):
+        return self._param_name
+
+    def __repr__(self):
+        if not self.param_name:
+            return str(self.value)
+        else:
+            return "{}={}".format(str(self.param_name), str(self.value))
+
+
+class CliTokenArgument(CliArgument):
+
+    def __init__(self, value, param_name=None):
+        if param_name is not None:
+            if type(param_name) is not str:
+                raise AttributeError("Attribute param_name should be str")
+        self._value = value
+        self._param_name = param_name
+
+
+class TokenHierarchyElement():
+
+    def __init__(self, element, path):
+        self._element = element
+        self._path = tuple(path)
+        self._named_vars = {}
+        self._numbered_vars = {}
+        self._input_sequence = []
+
+    @property
+    def named_variables(self):
+        return self._named_vars
+
+    @property
+    def token_variables(self):
+        return self._numbered_vars
+
+    @property
+    def input_sequence(self):
+        return self._input_sequence
+
+    @property
+    def element(self):
+        return self._element
+
+    def add_named_variable(self, var):
+        self._named_vars[var.var_id] = var
+
+    def add_numbered_variable(self, var):
+        self._numbered_vars[var.var_id] = var
+
+    @property
+    def path(self):
+        return self._path
+
+    def __eq__(self, rhs):
+        if isinstance(rhs, TokenHierarchyElement):
+            return (self._element == rhs._element) and (self._path == rhs.path)
+        return False
+
+    def __hash__(self):
+        return hash(self._element) + hash(self._path)
 
 
 class TokenLookup():
@@ -27,9 +124,11 @@ class TokenLookup():
         self._parent_stack = []
         hierarchy = []
         level = 0
+        parent_path = self.path.copy()
         while True:
             parent = self.get_parent(level)
-            hierarchy.append(parent)
+            hierarchy.append(TokenHierarchyElement(parent, parent_path.copy()))
+            parent_path.pop()
             level += 1
             if parent is self._root_grammar:
                 self._parent_stack = []
@@ -219,29 +318,54 @@ def EndOfInpuToken():
     return _EndOfInpuToken.getInstance()
 
 
+class DuplicateDefinitionException(Exception):
+
+    def __init__(self, name):
+        self._name = name
+
+    def __repr__(self):
+        return 'DuplicateDefinitionException("{}")'.format(self._name)
+
+    def __str__(self):
+        return 'DuplicateDefinitionException("{}")'.format(self._name)
+
+
+class DuplicateTokendefException(Exception):
+
+    def __init__(self, name):
+        self._name = name
+
+    def __repr__(self):
+        return 'DuplicateTokendefException("{}")'.format(self._name)
+
+    def __str__(self):
+        return 'DuplicateTokendefException("{}")'.format(self._name)
+
+
+class ArgumentError(Exception):
+    pass
+
+
 class InputElement():
 
     def __init__(self):
         self._parent = None
         self._value = None
-        self._binding = []
-        self._pre_exec_binding = None
-        self._has_binding = False
+        self._pre_match_binding = []
+        self._post_match_binding = []
         self._position = None
-        self._unresolved = False
-        self._unresolved_count = 0
-        self._has_parenthesis = False
         self._repeat_count = 1
 
-    @property
-    def has_repeater(self):
-        if self.repeat_count > 1:
-            return True
-        return False
+    def copy_extras(self, cp):
+        cp._pre_match_binding = self._pre_match_binding
+        cp._post_match_binding = self._post_match_binding
+        cp.repeat_count = self.repeat_count
 
-    @property
-    def has_binding_or_repeater(self):
-        return self.has_repeater or self.has_binding
+    def __str__(self):
+        return repr(self)
+
+    def __len__(self):
+        return 1
 
     @property
     def repeat_count(self):
@@ -254,51 +378,9 @@ class InputElement():
         else:
             raise ValueError("Repeater should be > 0")
 
-    def copy_extras(self, cp):
-        cp._binding = self._binding
-        cp._pre_exec_binding = self._pre_exec_binding
-        cp._has_parenthesis = self._has_parenthesis
-        cp.repeat_count = self.repeat_count
-
-    def copy(self):
-        cp = InputElement()
-        self.copy_extras(cp)
-        return cp
-
-    def __len__(self):
-        return 1
-
-    @property
-    def mandatory(self):
-        return False
-
-    @property
-    def terminal_token(self):
-        return True
-
-    @property
-    def has_parenthesis(self):
-        return self._has_parenthesis
-
-    def __repr__(self):
-        if self._parent:
-            return "{}".format(self.value)
-        return "{}:{}".format(self.__class__.__name__, self.value)
-
-    def __str__(self):
-        return self.__repr__()
-
     @property
     def value(self):
         return self._value
-
-    def __eq__(self, rhs):
-        if type(rhs) == self.__class__:
-            return self._value == rhs._value
-        return False
-
-    def __hash__(self):
-        return self._value.__hash__()
 
     @property
     def parent(self):
@@ -309,8 +391,8 @@ class InputElement():
 
     @parent.setter
     def parent(self, p):
-        if not isinstance(p, InputElementCollection):
-            raise ValueError("Expected tuple object for parent")
+        if not isinstance(p, InputElementHolder):
+            raise ValueError("Expected InputElementCollection object for parent")
         self._parent = p
 
     @property
@@ -322,197 +404,55 @@ class InputElement():
                 self._position = self.parent.index(self)
         return self._position
 
-    @property
-    def binding(self):
-        try:
-            return self._binding
-        except:
-            return []
+    @position.setter
+    def position(self, pos):
+        pos = int(pos)
+        if pos < 0:
+            raise ValueError("Position should be 0 or a positive integer")
+        self._position = pos
 
-    @binding.setter
-    def binding(self, b):
+    def validate_binding(self, b):
         if not isinstance(b, list):
             for e in b:
                 if not isinstance(e, str):
                     raise ValueError("Expected str object for binding code")
             raise ValueError("Expected list object for binding code segments")
-        self._binding = b
+        return b
 
     @property
-    def pre_exec_binding(self):
-        try:
-            if self._pre_exec_binding:
-                return self._pre_exec_binding
-        except:
-            return []
+    def pre_match_binding(self):
+        return self._pre_match_binding
 
-    @pre_exec_binding.setter
-    def pre_exec_binding(self, b):
-        if not isinstance(b, list):
-            for e in b:
-                if not isinstance(e, str):
-                    raise ValueError("Expected str object for binding code")
-            raise ValueError("Expected list object for binding code segments")
-        self._pre_exec_binding = b
+    @pre_match_binding.setter
+    def pre_match_binding(self, b):
+        self._pre_match_binding = self.validate_binding(b)
 
     @property
-    def has_binding(self):
-        try:
-            return self._has_binding
-        except:
-            return False
+    def post_match_binding(self):
+        return self._post_match_binding
 
-    @has_binding.setter
-    def has_binding(self, b):
-        if not isinstance(b, bool):
-            raise ValueError("Expected boolean object for binding code")
-        self._has_binding = b
+    @post_match_binding.setter
+    def post_match_binding(self, b):
+        self._post_match_binding = self.validate_binding(b)
 
     @property
-    def has_pre_exec_binding(self):
-        try:
-            if self._pre_exec_binding:
-                return True
-        except:
-            return False
-
-    def handle_brace(self, binding=None):
-        t0 = OptionalInputElement((self,))
-        if binding:
-            t0.pre_exec_binding = binding
-            t0.has_binding = True
-
-        self.parent = t0
-        t0.has_binding = self.has_binding
-        return t0
-
-    def handle_parenthesis(self, binding=None):
-        self._has_parenthesis = True
-        if binding:
-            self.pre_exec_binding = binding + (self.pre_exec_binding if self.pre_exec_binding else [])
-            self.has_binding = True
-        return self
-
-    def handle_binding(self, binding):
-        if binding is not None:
-            self.binding.append(binding)
-            self.has_binding = True
-        return self
-
-    def is_terminal_token_sequence(self, t2):
-        if isinstance(t2, SequenceInputElement):
-            for v in t2._value:
-                if not t2.terminal_token or t2.has_parenthesis:
-                    return False
-            return True
+    def mandatory(self):
         return False
-
-    def handle_sequencing(self, t2):
-        if not self.has_repeater and not t2.has_repeater and self.terminal_token and not self.has_parenthesis:
-            if self.is_terminal_token_sequence(t2):
-                first = t2.get(0)
-                if not t2.pre_exec_binding or first.mandatory:
-                    if t2.pre_exec_binding:
-                        first.pre_exec_binding = t2.pre_exec_binding + first.pre_exec_binding
-                        t2.pre_exec_binding = []
-                    self.parent = t2
-                    if self.has_binding:
-                        t2.has_binding = True
-                    t2._value = (self, ) + t2._value
-                    return t2
-
-        t0 = SequenceInputElement((self, t2))
-        self.parent = t0
-        t2.parent = t0
-        if self.has_binding or t2.has_binding:
-            t0.has_binding = True
-        return t0
-
-    def handle_alternatives(self, t2):
-        if isinstance(t2, AlternativeInputElement) and (not t2.has_binding_or_repeater):
-            self.parent = t2
-            if self.has_binding:
-                t2.has_binding = True
-            t2._value = tuple(t2.value.union({self}))
-            return t2
-
-        t0 = AlternativeInputElement({self, t2})
-        self.parent = t0
-        t2.parent = t0
-        if self.has_binding or t2.has_binding:
-            t0.has_binding = True
-        return t0
-
-
-class UnresolvedInputElement(InputElement):
-
-    def __init__(self, keyword, arglist=None):
-        super().__init__()
-        self._unresolved = True
-        self._unresolved_count = 1
-        self._arglist = arglist if arglist else []
-        if isinstance(keyword, str):
-            self._value = keyword
-        else:
-            raise ValueError("Expected str object")
-
-    @property
-    def arg_list(self):
-        return self._arglist
-
-    def copy(self):
-        cp = UnresolvedInputElement(self._value)
-        cp._unresolved = self._unresolved
-        cp._unresolved_count = self._unresolved_count
-        self.copy_extras(cp)
-        return cp
-
-    def as_dict(self):
-        return {
-            "classname": self.__class__.__name__,
-            "unresolved_count": self._unresolved_count,
-            "value": self._value,
-        }
-
-    @staticmethod
-    def from_dict(creator, d):
-        elem = UnresolvedInputElement(d["value"])
-        elem._unresolved = d["unresolved_count"]
-        return elem
 
 
 class ConstantInputElement(InputElement):
 
     def __init__(self, keyword):
         super().__init__()
-        self._keyword = keyword
-        if isinstance(keyword, str):
-            if " " in keyword:
-                self._value = '"' + keyword + '"'
-            else:
-                self._value = keyword
-        else:
-            raise ValueError("Expected str object")
-
-    def as_dict(self):
-        return {
-            "classname": self.__class__.__name__,
-            "value": self._keyword,
-        }
-
-    @staticmethod
-    def from_dict(creator, d):
-        elem = ConstantInputElement(d["value"])
-        return elem
+        self._value = keyword
 
     def copy(self):
         cp = ConstantInputElement(self._value)
-        cp._value = self._value
         self.copy_extras(cp)
         return cp
 
-    def __hash__(self):
-        return self._value.__hash__()
+    def __repr__(self, verbose=True):
+        return self._value
 
     @property
     def mandatory(self):
@@ -534,21 +474,13 @@ class KeywordInputElement(InputElement):
         else:
             raise ValueError("Expected str object")
 
-    def as_dict(self):
-        return {
-            "classname": self.__class__.__name__,
-            "value": self._value,
-        }
-
-    @staticmethod
-    def from_dict(creator, d):
-        elem = KeywordInputElement(d["value"])
-        return elem
-
     def copy(self):
         cp = KeywordInputElement(self._value)
         self.copy_extras(cp)
         return cp
+
+    def __repr__(self, verbose=True):
+        return self._value
 
     def __hash__(self):
         return self._value.__hash__()
@@ -564,17 +496,30 @@ class KeywordInputElement(InputElement):
         return [first]
 
 
-class InputElementCollection(InputElement):
+class InputElementHolder(InputElement):
+    pass
 
-    def __init__(self):
+
+class InputElementCollection(InputElementHolder):
+
+    def __init__(self, sequence):
         super().__init__()
-        self._value = tuple()
-
-    def __hash__(self):
-        return self._value.__hash__()
+        self._mandatory = None
+        if isinstance(sequence, tuple):
+            self._value = sequence
+        else:
+            raise ValueError("Expected tuple object")
 
     def __len__(self):
         return len(self._value)
+
+    def copy(self):
+        val = tuple([v.copy() for v in self._value])
+        cp = self.__class__(val)
+        for v in val:
+            v.parent = cp
+        self.copy_extras(cp)
+        return cp
 
     def get(self, position):
         return self._value[position]
@@ -600,34 +545,16 @@ class InputElementCollection(InputElement):
                 first.add_prefix(self.position)
         return firsts
 
-    @property
-    def terminal_token(self):
-        return False
-
 
 class SequenceInputElement(InputElementCollection):
 
-    def __init__(self, value):
-        super().__init__()
-        self._mandatory = None
-        if isinstance(value, tuple):
-            self._value = value
+    def __repr__(self, verbose=True):
+        _repr = "Seq" if verbose else ""
+        if self.repeat_count > 1:
+            _repeat = "*{}".format(self.repeat_count)
         else:
-            raise ValueError("Expected tuple object")
-
-    def as_dict(self):
-        return {
-            "classname": self.__class__.__name__,
-            "value": [v.as_dict() for v in self._value],
-        }
-
-    @staticmethod
-    def from_dict(creator, d):
-        elem = SequenceInputElement(tuple([creator.dict_to_element(v) for v in d["value"]]))
-        return elem
-
-    def __hash__(self):
-        return self._value.__hash__()
+            _repeat = ""
+        return _repr + '(' + ", ".join([e.__repr__(verbose=False) for e in self.value]) + ')' + _repeat
 
     def __len__(self):
         if self.repeat_count > 1:
@@ -657,21 +584,6 @@ class SequenceInputElement(InputElementCollection):
             pos += 1
         raise IndexError("{} doesnt have {}".format(self, child))
 
-    def copy(self):
-        val = tuple([v.copy() for v in self._value])
-        cp = SequenceInputElement(val)
-        for v in val:
-            v.parent = cp
-        self.copy_extras(cp)
-        return cp
-
-    def __eq__(self, rhs):
-        if type(rhs) == self.__class__:
-            return self._value == rhs._value
-        elif len(self._value) == 1:
-            return self._value[0] == rhs
-        return False
-
     @property
     def mandatory(self):
         if self._mandatory is not None:
@@ -683,224 +595,19 @@ class SequenceInputElement(InputElementCollection):
         self._mandatory = False
         return False
 
-    @property
-    def terminal_token(self):
-        return False
-
-    def handle_brace(self, binding=None):
-        t0 = None
-        if not self.has_repeater:
-            if all(isinstance(e, OptionalInputElement) for e in self.value):
-                t0 = self
-                if self.has_pre_exec_binding:
-                    binding = self.pre_exec_binding if not binding else binding + self.pre_exec_binding
-                    self.pre_exec_binding = []
-            else:
-                t0 = OptionalInputElement(self.value)
-                for e in self.value:
-                    e.parent = t0
-                    if e.has_binding:
-                        t0.has_binding = True
-
-        if t0 is None:
-            t0 = OptionalInputElement((self, ))
-            self.parent = t0
-            t0.has_binding = self.has_binding
-
-        if binding:
-            t0.pre_exec_binding = binding
-            t0.has_binding = True
-
-        return t0
-
-    def is_terminal_token_sequence(self, t2):
-        if isinstance(t2, SequenceInputElement):
-            for v in t2._value:
-                if not t2.terminal_token or t2.has_parenthesis:
-                    return False
-            return True
-        return False
-
-    def handle_sequencing(self, t2):
-        if self.has_repeater:
-            t0 = SequenceInputElement((self, t2))
-            self.parent = t0
-            t2.parent = t0
-            if self.has_binding or t2.has_binding:
-                t0.has_binding = True
-        else:
-            if not t2.has_repeater and self.is_terminal_token_sequence(t2):
-                part2 = t2.value
-                if t2.pre_exec_binding:
-                    first = t2.get(0)
-                    first.pre_exec_binding = t2.pre_exec_binding + first.pre_exec_binding
-                if t2.binding:
-                    last =  t2.get(len(t2) - 1)
-                    last.binding = last.binding + t2.binding
-            else:
-                part2 = (t2,)
-                if self.binding:
-                    last =  self.get(len(t2) - 1)
-                    last.binding = last.binding + self.binding
-
-            for e in part2:
-                e.parent = self
-                if e.has_binding:
-                    self.has_binding = True
-
-            self._value = self._value + part2
-            t0 = self
-
-        return t0
-
 
 class OptionalInputElement(InputElementCollection):
 
-    def __init__(self, value):
-
-        super().__init__()
-        if isinstance(value, tuple):
-            self._value = value
-        else:
-            raise ValueError("Expected tuple object")
-
-    def as_dict(self):
-        return {
-            "classname": self.__class__.__name__,
-            "value": [v.as_dict() for v in self._value],
-        }
-
-    @staticmethod
-    def from_dict(creator, d):
-        elem = OptionalInputElement(tuple([creator.dict_to_element(v) for v in d["value"]]))
-        return elem
-
-    def copy(self):
-        val = tuple([v.copy() for v in self._value])
-        cp = OptionalInputElement(val)
-        for v in val:
-            v.parent = cp
-        self.copy_extras(cp)
-        return cp
-
-    @property
-    def terminal_token(self):
-        return False
-
-    def __eq__(self, rhs):
-        if type(rhs) == self.__class__:
-            return self._value == rhs._value
-        return False
-
-    def __hash__(self):
-        return self._value.__hash__()
-
-    def __repr__(self):
-        rep_str = "{" + ", ".join(str(e) for e in self._value) + "}"
-        if self._parent:
-            return "{}".format(rep_str)
-        return "{}:{}".format(self.__class__.__name__, rep_str)
-
-    def handle_brace(self, binding=None):
-        if self.has_repeater:
-            t0 = SequenceInputElement((self, ))
-            self.parent = t0
-            t0.has_binding = self.has_binding
-        else:
-            t0 = self
-            if self.has_pre_exec_binding:
-                binding = self.pre_exec_binding if not binding else binding + self.pre_exec_binding
-                self.pre_exec_binding = []
-
-        if binding:
-            t0.pre_exec_binding = binding
-            t0.has_binding = True
-
-        return t0
-
-    def handle_alternatives(self, t2):
-        part1 = None
-        part2 = None
-
-        if not (self.has_binding_or_repeater or t2.has_binding_or_repeater):
-            if (len(self) == 1):
-                if isinstance(self.value[0], AlternativeInputElement):
-                    part1 = self.value[0].value
-                else:
-                    part1 = {self.value[0]}
-
-            if type(t2) == AlternativeInputElement:
-                part2 = t2.value
-            elif (len(t2) == 1):
-                if isinstance(t2.value[0], AlternativeInputElement):
-                    part2 = t2.value[0].value
-                else:
-                    part2 = {t2}
-
-            if (part1 is not None) and (part2 is not None):
-                alt = AlternativeInputElement(part1.union(part2))
-                for c in alt.value:
-                    c.parent = alt
-                t0 = OptionalInputElement((alt, ))
-                alt.parent = t0
-                return t0
-
-        t0 = AlternativeInputElement({self, t2})
-        self.parent = t0
-        t2.parent = t0
-        if self.has_binding or t2.has_binding:
-            t0.has_binding = True
-        return t0
+    def __repr__(self, verbose=True):
+        _repr = "Opt" if verbose else ""
+        return _repr + '{' + ", ".join([e.__repr__(verbose=False) for e in self.value]) + '}'
 
 
 class AlternativeInputElement(InputElementCollection):
 
-    def __init__(self, value):
-
-        super().__init__()
-        self._mandatory = None
-        if isinstance(value, set):
-            self._value = tuple(value)
-        else:
-            raise ValueError("Expected set object")
-
-    def as_dict(self):
-        return {
-            "classname": self.__class__.__name__,
-            "value": [v.as_dict() for v in self._value],
-        }
-
-    @staticmethod
-    def from_dict(creator, d):
-        elem = AlternativeInputElement(set([creator.dict_to_element(v) for v in d["value"]]))
-        return elem
-
-    def copy(self):
-        val = set([v.copy() for v in self._value])
-        cp = AlternativeInputElement(val)
-        for v in val:
-            v.parent = cp
-        self.copy_extras(cp)
-        return cp
-
-    def __eq__(self, rhs):
-        if type(rhs) == self.__class__:
-            return self._value == rhs._value
-        elif (len(self) == 1) and (rhs in self._value):
-            return True
-        return False
-
-    def __hash__(self):
-        return self._value.__hash__()
-
-    @property
-    def terminal_token(self):
-        if not self._value:
-            return False
-        for e in self._value:
-            if e.terminal_token is False:
-                return False
-        return True
+    def __repr__(self, verbose=True):
+        _repr = "Alt" if verbose else ""
+        return _repr + '(' + " | ".join([e.__repr__(verbose=False) for e in self.value]) + ')'
 
     @property
     def mandatory(self):
@@ -913,42 +620,6 @@ class AlternativeInputElement(InputElementCollection):
         self._mandatory = True
         return True
 
-    @property
-    def value(self):
-        return set(self._value)
-
-    def __repr__(self):
-        rep_str = "(" + " | ".join(str(e) for e in self._value) + ")"
-        if self._parent:
-            return "{}".format(rep_str)
-        return "{}:{}".format(self.__class__.__name__, rep_str)
-
-    def handle_alternatives(self, t2):
-
-        if type(t2) == OptionalInputElement:
-            return t2.handle_alternatives(self)
-
-        if not (self.has_binding_or_repeater or t2.has_binding_or_repeater):
-            if isinstance(t2, AlternativeInputElement):
-                part2 = t2.value
-            else:
-                part2 = {t2,}
-
-            for e in part2:
-                e.parent = self
-            if e.has_binding:
-                self.has_binding = True
-
-            self._value = tuple(self.value.union(part2))
-            return self
-
-        t0 = AlternativeInputElement({self, t2})
-        self.parent = t0
-        t2.parent = t0
-        if self.has_binding or t2.has_binding:
-            t0.has_binding = True
-        return t0
-
     def first(self, root_grammar=None):
         firsts = []
         for i in self._value:
@@ -959,40 +630,27 @@ class AlternativeInputElement(InputElementCollection):
         return firsts
 
 
-class NamedGrammar(InputElementCollection):
+class NamedGrammar(InputElementHolder):
 
     def __init__(self, name, param_list, value):
         super().__init__()
         self._name = name
-        self._param_list = param_list if param_list else []
-
-        validated_params = []
-
-        for param in self._param_list:
-            if not isinstance(param, str):
-                raise ValueError("Parameter name should be str not {}".format(type(param)))
-            if param in validated_params:
-                raise ValueError("Duplicate parameter name: {}".format(param))
-            validated_params.append(param)
+        self._param_list = []
 
         if isinstance(value, InputElement):
             self._value = value
-            value.parent = self
         else:
             raise ValueError("Expected InputElement object")
 
-    def as_dict(self):
-        return {
-            "classname": self.__class__.__name__,
-            "name": self._name,
-            "value": self._value.as_dict(),
-            "param_list": self._param_list,
-        }
+        if not param_list:
+            param_list = []
 
-    @staticmethod
-    def from_dict(creator, d):
-        elem = NamedGrammar(d["name"], d["param_list"], creator.dict_to_element(d["value"]))
-        return elem
+        for param in param_list:
+            if not isinstance(param, str):
+                raise ValueError("Parameter name should be str not {}".format(type(param)))
+            if param in self._param_list:
+                raise ValueError("Duplicate parameter name: {}".format(param))
+            self._param_list.append(param)
 
     def copy(self):
         cp = NamedGrammar(self._name, self._param_list, self._value.copy())
@@ -1000,16 +658,12 @@ class NamedGrammar(InputElementCollection):
         return cp
 
     @property
-    def terminal_token(self):
-        return self._value.terminal_token
-
-    @property
     def param_list(self):
         return self._param_list
 
     @property
     def value(self):
-        return self._value.value
+        return self._value
 
     def get(self, position):
         if position == 0:
@@ -1017,17 +671,13 @@ class NamedGrammar(InputElementCollection):
         raise IndexError("NamedGrammar: Invalid index: {}".format(position))
 
     def index(self, child):
-        if self._value == child:
+        if id(self._value) == id(child):
             return 0
         raise IndexError("{} doesnt have {}".format(self, child))
 
     @property
     def parent(self):
         return None
-
-    @property
-    def mandatory(self):
-        return self._value.mandatory
 
     @parent.setter
     def parent(self, p):
@@ -1041,16 +691,9 @@ class NamedGrammar(InputElementCollection):
     def name(self):
         return self._name
 
-    def __eq__(self, rhs):
-        if type(rhs) == self.__class__:
-            return self._value == rhs._value
-        return False
-
-    def __len__(self):
-        return 1
-
-    def __hash__(self):
-        return self._value.__hash__()
+    @property
+    def mandatory(self):
+        return self._value.mandatory
 
     def first(self, root_grammar=None):
         firsts = self._value.first(root_grammar=root_grammar)
@@ -1058,41 +701,58 @@ class NamedGrammar(InputElementCollection):
             first.add_prefix(self.position)
         return firsts
 
-    def __repr__(self):
-        return "NamedGrammar({}:{})".format(self._name, self._value.__repr__())
 
+def map_grammar_arguments(grammar_name, parameter_list, arglist):
+    arg_count = len(arglist)
+    param_list = parameter_list.copy()
+    param_count = len(param_list)
+
+    if param_count < arg_count:
+        raise ArgumentError(
+            "Grammar {} referenced with {} arguments. It has only {} parameters".format(
+                grammar_name, arg_count, param_count))
+
+    has_kwarg = False
+    param_map = {}
+
+    for arg in arglist:
+        if arg.param_name:
+            if arg.param_name in param_map:
+                raise ArgumentError("Param {} got more than one argument".format(arg.param_name))
+            has_kwarg = True
+            for param in param_list:
+                if arg.param_name == param:
+                    param_map[arg.param_name] = arg
+                    param_list.remove(param)
+                    break
+            else:
+                raise ArgumentError("Could not match param {} for keyword argument".format(arg.param_name))
+        else:
+            if has_kwarg:
+                raise ArgumentError("Positional argument should not follow keyword argument")
+            param = param_list.pop(0)
+            param_map[str(param)] = arg
+
+    while param_list:
+        param = param_list.pop(0)
+        if param.has_def_value:
+            param_map[str(param)] = CliArgument(param.defvalue)
+        else:
+            param_map[str(param)] = CliArgument(None)
+
+    return param_map
 
 class GrammarRefElement(InputElement):
 
     def __init__(self, grammar, arglist):
         super().__init__()
         if isinstance(grammar, NamedGrammar):
-            self._name = grammar.name
             self._value = grammar
             self._arglist = arglist if arglist else []
             if self._arglist:
-                arg_count = len(self._arglist)
-                param_list = grammar.param_list
-                param_count = len(param_list)
-                if param_count < arg_count:
-                    raise ValueError(
-                        "Grammar {} referenced with {} arguments. It has only {} parameters".format(
-                            self._name, arg_count, param_count))
+                self._param_mapping = map_grammar_arguments(self.name, self._value.param_list, self._arglist)
         else:
             raise ValueError("Expected NamedGrammar object")
-
-    def as_dict(self):
-        return {
-            "classname": self.__class__.__name__,
-            "name": self._name,
-            "arglist": self._arglist,
-        }
-
-    @staticmethod
-    def from_dict(creator, d):
-        grammar = creator.get_grammar(d["name"])
-        elem = GrammarRefElement(grammar, d["arglist"])
-        return elem
 
     def copy(self):
         cp = GrammarRefElement(self._value, self._arglist)
@@ -1100,32 +760,29 @@ class GrammarRefElement(InputElement):
         return cp
 
     @property
-    def value(self):
-        return self._value.value
+    def name(self):
+        return self._value.name
 
     @property
-    def terminal_token(self):
-        return self._value.terminal_token
+    def value(self):
+        return self._value
 
     @property
     def arg_list(self):
         return self._arglist
 
-    def __eq__(self, rhs):
-        if type(rhs) == self.__class__:
-            return self._value == rhs._value
-        return False
-
-    def __hash__(self):
-        return self._value.__hash__()
-
-    def __repr__(self):
-        return "GrammarRef({}:{})".format(self._name, self._value._value.__repr__())
+    @property
+    def param_mapping(self):
+        return self._param_mapping
 
     def get(self, position):
         if position == 0:
             return self._value
         raise IndexError("GrammarRefElement: Invalid index: {}".format(position))
+
+    @property
+    def mandatory(self):
+        return self._value.mandatory
 
     def first(self, root_grammar=None):
         firsts = self._value.first(root_grammar=root_grammar)
@@ -1134,44 +791,98 @@ class GrammarRefElement(InputElement):
                 first.add_prefix(self.position)
         return firsts
 
+
+class UnresolvedInputElement(InputElement):
+
+    def __init__(self, keyword, arglist=None):
+        super().__init__()
+        if isinstance(keyword, str):
+            self._value = keyword
+        else:
+            raise ValueError("Expected str object")
+        self._arglist = arglist if arglist else []
+
     @property
-    def mandatory(self):
-        return self._value.mandatory
+    def value(self):
+        return self._value
+
+    @property
+    def arg_list(self):
+        return self._arglist
+
+    def copy(self):
+        cp = UnresolvedInputElement(self._value)
+        self.copy_extras(cp)
+        return cp
 
 
-class ElementTreeCreator():
+class TokenClassDef():
 
-    element_map = None
+    def __init__(self, classname, arglist):
+        self._classname = classname
+        self._arglist = [arg.value for arg in arglist]
 
-    element_classes = [
-        UnresolvedInputElement,
-        ConstantInputElement,
-        KeywordInputElement,
-        SequenceInputElement,
-        OptionalInputElement,
-        AlternativeInputElement,
-        NamedGrammar,
-        GrammarRefElement,
-    ]
+    @property
+    def classname(self):
+        return self._classname
 
-    def __init__(self, json_dict):
-        self._json_dict = json_dict
-        self._token_map = {}
-        self._grammar_map = {}
-        if ElementTreeCreator.element_map is None:
-            ElementTreeCreator.element_map = {e.__name__: e for e in ElementTreeCreator.element_classes}
+    @property
+    def arglist(self):
+        return self._arglist
+
+
+class GrammarSpecification:
+
+    def __init__(self):
+        self._grammars = []
+        self._tokens = []
+        self._token_defs = {}
+        self._named_grammars = {}
+        self._unresolved_tokens = {}
+
+    @property
+    def grammars(self):
+        return self._grammars
+
+    @property
+    def tokens(self):
+        return self._tokens
+
+    @property
+    def token_defs(self):
+        return self._token_defs
+
+    @property
+    def named_grammars(self):
+        return self._named_grammars
+
+    def add_grammar(self, grammar):
+        if grammar.name in self._named_grammars:
+            raise DuplicateDefinitionException(grammar.name)
+        if grammar.name in self._token_defs:
+            raise DuplicateDefinitionException(grammar.name)
+        self._named_grammars[grammar.name] = grammar
+        self._grammars.append(grammar)
+
+    def add_token_def(self, tokenname, classdef):
+        if tokenname in self._token_defs:
+            raise DuplicateTokendefException(tokenname)
+        if tokenname in self._named_grammars:
+            raise DuplicateDefinitionException(tokenname)
+        self._token_defs[tokenname] = classdef
+        self._tokens.append(classdef)
+
+    def add_unresolved_element(self, element):
+        if element.value not in self._unresolved_tokens:
+            self._unresolved_tokens[element.value] = []
+        self._unresolved_tokens[element.value].append(element)
 
     def get_grammar(self, name):
-        return self._grammar_map[name]
+        if name in self._named_grammars:
+            return self._named_grammars[name]
+        return None
 
-    def dict_to_element(self, d):
-        elem_class = ElementTreeCreator.element_classes[d['name']]
-        obj = elem_class.from_dict(self, d)
-        if isinstance(obj, NamedGrammar):
-            self._grammar_map[d['name']] = obj
-
-    def get_grammars(self):
-        return {}
-
-    def get_token_defs(self):
-        return {}
+    def get_tokendef(self, name):
+        if name in self.token_defs:
+            return self.token_defs[name]
+        return None

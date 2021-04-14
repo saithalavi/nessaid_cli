@@ -14,7 +14,7 @@ from nessaid_cli.tokens import (
 )
 
 class TestCmd(NessaidCmd):
-    """
+    r"""
     token TEST_NUMBER RangedIntToken(1, 100); // Token to match integer between 1 and 100
     token STRING_TOKEN RangedStringToken(5, 10); // Token to match a string of length 5 to 10
     """
@@ -28,8 +28,8 @@ class TestCmd(NessaidCmd):
         print("External function:", *args)
 
     def do_command1(self, number):
-        """
-        "command1"
+        r"""
+        "command\n1"
         TEST_NUMBER
         <<
             $number = $2;
@@ -66,7 +66,7 @@ class TestCmd(NessaidCmd):
         print("Input number is:", number)
 
     def do_command2(self, string):
-        """
+        r"""
         "command2"
         STRING_TOKEN
         <<
@@ -78,7 +78,7 @@ class TestCmd(NessaidCmd):
         print("Input str is:", string);
 
     def do_command3(self, string, number, numbers):
-        """
+        r"""
         <<
             $numbers = list();
         >>
@@ -112,6 +112,6 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         sys.exit(0)
     except Exception as e:
-        print("Exception in cmdloop:", e)
+        cmd.error("Exception in cmdloop:", e)
         sys.exit(1)
     sys.exit(0)

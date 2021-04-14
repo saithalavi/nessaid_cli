@@ -7,7 +7,8 @@
 
 import sys
 
-from nessaid_cli.compiler import CompiledGrammarSet
+from nessaid_cli.utils import StdStreamsHolder, convert_to_python_string
+
 
 from nessaid_cli.tokens import (
     CliToken,
@@ -22,22 +23,30 @@ from nessaid_cli.elements import (
     NamedGrammar,
     GrammarRefElement,
     AlternativeInputElement,
+    GrammarSpecification,
+    map_grammar_arguments,
+    TokenHierarchyElement
 )
 
 from nessaid_cli.elements import (
     SequenceInputElement,
     OptionalInputElement,
+    CliArgument
 )
 
 
 from nessaid_cli.binding_parser.binding_objects import (
     BindingCall,
     FunctionCall,
-    BindingObject,
-    BindingVariable,
     NamedVariable,
-    NumberedVariable,
+    TokenVariable,
+    BindingVariable,
     AssignmentStatement,
+)
+
+from nessaid_cli.lex_yacc_common import (
+    DollarNumber,
+    DollarVariable
 )
 
 
@@ -70,7 +79,7 @@ class ParsingResult():
         }
 
     def __repr__(self):
-        return self.as_dict()
+        return str(self.as_dict())
 
     def __str__(self):
         return str(self.as_dict())
@@ -146,290 +155,180 @@ class ParsingResult():
                         self.next_constant_token = str(completion[0])
 
 
-class ElementContext():
-
-    def __init__(self, exec_context, element, token_value, param_list=None):
-        self._exec_context = exec_context
-        self.print = exec_context.print
-        self.error = exec_context.error
-        self._arg_values = {}
-        self._num_arg_values = {}
-        self._local_variables = {}
-        self._element = element
-        self._param_list = param_list if param_list else []
-        for param in self._param_list:
-            self._arg_values[param] = None
-
-        if element.terminal_token:
-            self._token_value = token_value
-        else:
-            self._token_value = None
-
-    @property
-    def token_value(self):
-        return self._token_value
-
-    @property
-    def arg_values(self):
-        return self._arg_values
-
-    @property
-    def num_arg_values(self):
-        return self._num_arg_values
-
-    @property
-    def local_variables(self):
-        return self._local_variables
-
-    @property
-    def param_list(self):
-        return self._param_list
-
-    def create_local_variable(self, var_name):
-        self._local_variables[var_name] = NamedVariable(var_name)
-        return self._local_variables[var_name]
-
-    def set_number_arg(self, position, value):
-        if position != value.var_index:
-            self.error("Bug!!!! Debug and fix with current sequence:")
-        self._num_arg_values[value.var_id] = value
-
-    def set_argument_by_name(self, param_name, value):
-        if param_name not in self._arg_values:
-            raise KeyError("Parameter {} not available for this grammar".format(param_name))
-        self._arg_values[param_name] = value
-
-    def set_argument_by_index(self, index, value):
-        param_name = self._param_list[index]
-        self._arg_values[param_name] = value
-
-
 class ExecContext():
 
-    def __init__(self, interface, root_grammar, match_values, arglist):
+    def __init__(self, interface, root_grammar, arglist):
         self._interface = interface
         self.print = interface.print
         self.error = interface.error
         self._root_grammar = root_grammar
-        self._match_values = match_values
-        self._root_arglist = [NamedVariable(param) for param in root_grammar.param_list]
+        self._root_arglist = [NamedVariable(param.name) for param in root_grammar.param_list]
+        self._param_mapping = map_grammar_arguments(root_grammar.name, root_grammar.param_list, arglist)
 
-        for index in range(min(len(root_grammar.param_list), len(arglist))):
-            self._root_arglist[index].assign(BindingObject.create_object(arglist[index]))
+        for param in self._root_arglist:
+            if param.var_id in self._param_mapping:
+                param.assign(self._param_mapping[param.var_id].value)
 
-        self._elements_executing = []
-        self._elem_contexts = []
-        self._grammar_context = []
+        self._element_stack = []
+        self._grammar_stack = []
 
     @property
     def root_arglist(self):
-        return self._root_arglist
+        return [e.value for e in self._root_arglist]
 
-    def enter(self, element, position_sequence, token_value):
-        # print("Enter call:", id(element), element, token_value)
-        #if type(element) in [NamedGrammar, GrammarRefElement]:
-        #    print("{}: {}", element._name, position_sequence)
-        if (element, position_sequence) not in self._elements_executing:
-            # print("Entering exec:", element)
-            cur_context = None
-            parent_context = None
+    def resolve_variable(self, var):
+        if type(var) == DollarVariable:
+            grammar_context = self._grammar_stack[-1] if self._grammar_stack else None
+            if var in grammar_context.named_variables:
+                return grammar_context.named_variables[var]
+        elif type(var) == DollarNumber:
+            parent_context = self._element_stack[-1] if self._element_stack else None
+            if var in parent_context.token_variables:
+                return parent_context.token_variables[var]
+        return None
 
-            if self._elem_contexts:
-                parent_context = self._elem_contexts[-1]
+    def resolve_argument(self, argument):
+        if type(argument) in [DollarVariable, DollarNumber]:
+            return self.resolve_variable(argument)
+        elif type(argument) is CliArgument:
+            return self.resolve_argument(argument.value)
+        elif type(argument) == BindingCall:
+            ext_fn = argument.name
+            arglist = [self.evaluate(arg) for arg in argument.arglist]
+            call_res = self._interface.execute_binding_call(ext_fn, False, *arglist)
+            return call_res
+        elif type(argument) == FunctionCall:
+            ext_fn = argument.name
+            arglist = [self.evaluate(arg) for arg in argument.arglist]
+            call_res = self._interface.execute_binding_call(ext_fn, True, *arglist)
+            return call_res
+        return argument
 
-            if type(element) == NamedGrammar:
-                cur_context = ElementContext(self, element, token_value, element.param_list)
-                if not self._elements_executing:
-                    arglist = self._root_arglist
-                else:
-                    arglist = [NamedVariable(param) for param in element.param_list]
-                    for index in range(min(len(element.param_list), len(parent_context.arg_values))):
-                        arglist[index].assign(parent_context.arg_values[element.param_list[index]])
-
-                arg_index = 0
-                arg_values = {}
-                for arg in arglist:
-                    cur_context.set_argument_by_index(arg_index, arg)
-                    arg_index += 1
-
-                self._grammar_context.append(cur_context)
-
-            elif type(element) == GrammarRefElement:
-                arg_values = []
-                arglist = element.arg_list
-                grammar = element.get(0)
-                cur_context = ElementContext(self, element, token_value, grammar.param_list)
-                arg_index = 0
-                for arg in arglist:
-                    if type(arg) == NamedVariable:
-                        arg_values.append(self.resolve_named_var(arg.var_id))
-                    elif type(arg) == NumberedVariable:
-                        parent_context = self._elem_contexts[-1] if self._elem_contexts else None
-                        num_arg = self.resolve_numbered_var(parent_context, cur_context, arg.var_id)
-                        arg_values.append(num_arg)
-                    else:
-                        arg_values.append(BindingObject.create_object(arg))
-                    cur_context.set_argument_by_index(arg_index, arg_values[-1])
-                    arg_index += 1
-            else:
-                cur_context = ElementContext(self, element, token_value)
-
-            self._elements_executing.append((element, position_sequence))
-            self._elem_contexts.append(cur_context)
-
-            if element.pre_exec_binding:
-                # print("Entry-Binding code:", element.pre_exec_binding)
-                self.execute_binding(parent_context, cur_context, element.pre_exec_binding)
+    def evaluate(self, arg):
+        res_arg = self.resolve_argument(arg)
+        if isinstance(res_arg, BindingVariable):
+            res = res_arg.value
         else:
-            pass #print("Existing")
+            res = res_arg
 
-    def execute_binding(self, parent_context, element_context, binding_code):
+        if isinstance(res, str):
+            res = convert_to_python_string(res)
+        return res
 
-        grammar_context = self._grammar_context[-1] if self._grammar_context else None
+    def execute_binding(self, binding_code):
+
+        grammar_context = self._grammar_stack[-1] if self._grammar_stack else None
 
         for code in binding_code:
             for block in code.blocks:
                 if isinstance(block, AssignmentStatement):
                     lhs = None
-                    if type(block.lhs) == NamedVariable:
-                        lhs = self.resolve_named_var(block.lhs.var_id)
+                    if type(block.lhs) == DollarVariable:
+                        lhs = self.resolve_variable(block.lhs)
                         if not lhs:
-                            lhs = grammar_context.create_local_variable(block.lhs.var_id)
-
-                    elif type(block.lhs) == NumberedVariable:
-                        lhs = self.resolve_numbered_var(parent_context, element_context, block.lhs.var_id)
+                            var = NamedVariable(str(block.lhs))
+                            grammar_context.add_named_variable(var)
+                            lhs = var
+                    elif type(block.lhs) == DollarNumber:
+                        lhs = self.resolve_variable(block.lhs)
 
                     if lhs:
-                        rhs = self.resolve_argument(parent_context, element_context, block.rhs)
+                        rhs = self.resolve_argument(block.rhs)
 
                     if lhs and rhs:
-                        lhs.assign(BindingObject.create_object(rhs.value))
+                        lhs.assign(rhs)
 
                 elif isinstance(block, BindingCall):
                     ext_fn = block.name
-                    arglist = [self.resolve_argument(parent_context, element_context, arg) for arg in block.arglist]
-                    argvalues = [arg.value if arg else None for arg in arglist]
-                    _ = self._interface.execute_binding_call(ext_fn, False, *argvalues)
+                    arglist = [self.evaluate(arg) for arg in block.arglist]
+                    _ = self._interface.execute_binding_call(ext_fn, False, *arglist)
                 elif isinstance(block, FunctionCall):
                     ext_fn = block.name
-                    arglist = [self.resolve_argument(parent_context, element_context, arg) for arg in block.arglist]
-                    argvalues = [arg.value if arg else None for arg in arglist]
-                    _ = self._interface.execute_binding_call(ext_fn, True, *argvalues)
+                    arglist = [self.evaluate(arg) for arg in block.arglist]
+                    _ = self._interface.execute_binding_call(ext_fn, True, *arglist)
 
-    def resolve_argument(self, parent_context, element_context, arg):
-        if type(arg) == NamedVariable:
-            return self.resolve_named_var(arg.var_id)
-        elif type(arg) == NumberedVariable:
-            return self.resolve_numbered_var(parent_context, element_context, arg.var_id)
-        elif type(arg) == BindingCall:
-            ext_fn = arg.name
-            arglist = [self.resolve_argument(parent_context, element_context, arg) for arg in arg.arglist]
-            argvalues = [arg.value if arg else None for arg in arglist]
-            call_res = self._interface.execute_binding_call(ext_fn, False, *argvalues)
-            return call_res
-        elif type(arg) == FunctionCall:
-            ext_fn = arg.name
-            arglist = [self.resolve_argument(parent_context, element_context, arg) for arg in arg.arglist]
-            argvalues = [arg.value if arg else None for arg in arglist]
-            call_res = self._interface.execute_binding_call(ext_fn, True, *argvalues)
-            return call_res
-        else:
-            return arg
+    def enter(self, element_ctx: TokenHierarchyElement, token_value: str):
 
-    def resolve_named_var(self, var_id):
-        arg_values = self._grammar_context[-1].arg_values
-        if var_id in arg_values:
-            return arg_values[var_id]
+        if element_ctx in self._element_stack:
+            element_ctx = [e for e in self._element_stack if e == element_ctx][0]
+            element_ctx.input_sequence.append(token_value)
+            return
 
-        local_vars = arg_values = self._grammar_context[-1].local_variables
-        if var_id in local_vars:
-            return arg_values[var_id]
+        element_ctx.input_sequence.append(token_value)
 
-        else:
-            return None
+        if element_ctx not in self._element_stack:
+            element = element_ctx.element
 
-    def resolve_numbered_var(self, parent_context, element_context, var_id):
-        grammar_context = self._grammar_context[-1] if self._grammar_context else None
-        if element_context and var_id in element_context.num_arg_values:
-            return element_context.num_arg_values[var_id]
-        if parent_context and var_id in parent_context.num_arg_values:
-            return parent_context.num_arg_values[var_id]
-        if grammar_context and var_id in grammar_context.num_arg_values:
-            return grammar_context.num_arg_values[var_id]
-        return None
-
-    def exit(self, element, position_sequence):
-        #print("Exit call:", id(element), element)
-        if (element, position_sequence) in self._elements_executing:
-            parent_context = None
-            cur_element, _ = self._elements_executing.pop()
-            cur_context = self._elem_contexts.pop()
-            if self._elem_contexts:
-                parent_context = self._elem_contexts[-1]
-
-            if cur_element != element:
-                self.error("\n"*5)
-                self.error("Error in exec stack")
-                self.error("\n"*5)
-
-            if cur_element.terminal_token:
-                parent = None
-                position = element.position
-                if self._elements_executing:
-                    parent, _ = self._elements_executing[-1]
-                    if isinstance(parent, AlternativeInputElement):
-                        position = 0
-                    elif parent.repeat_count > 1:
-                        position = 0
-                    elif cur_element.has_parenthesis:
-                        position = 0
-
-                numbered_arg = NumberedVariable("$" + str(position + 1))
-                numbered_arg.assign(BindingObject.create_object(cur_context.token_value))
-                cur_context.set_number_arg(position + 1, numbered_arg)
-
-                if self._elements_executing:
-                    parent, _ = self._elements_executing[-1]
-
-                    if type(parent) in [SequenceInputElement, OptionalInputElement, NamedGrammar] or parent.terminal_token:
-                        parent_context = self._elem_contexts[-1]
-                        parent_context.set_number_arg(position + 1, numbered_arg)
-
-                has_parenthesis = False
-                if element.has_parenthesis:
-                    has_parenthesis = True
-                elif parent:
-                    for i in range(element.position):
-                        e = parent.get(i)
-                        if (not e.terminal_token) or (e.has_parenthesis):
-                            has_parenthesis = True
-
-                if not has_parenthesis:
-                    context_index = -2
-                    while (type(parent) in [SequenceInputElement, AlternativeInputElement]) and (not parent.has_parenthesis):
-                        parent, _ = self._elements_executing[context_index]
-                        parent_context = self._elem_contexts[context_index]
-                        if type(parent) != AlternativeInputElement:
-                            parent_context.set_number_arg(position + 1, numbered_arg)
-                        context_index -= 1
-
-            if element.binding:
-                self.execute_binding(parent_context, cur_context, element.binding)
-                #print("Exit-Binding code:", element.binding)
+            if element.pre_match_binding:
+                self.execute_binding(element.pre_match_binding)
 
             if type(element) == NamedGrammar:
-                self._grammar_context.pop()
+                if not self._element_stack:
+                    for arg in self._root_arglist:
+                        element_ctx.add_named_variable(arg)
+                else:
+                    grammar_ref_ctx = self._element_stack[-1]
+                    for arg in grammar_ref_ctx.named_variables.values():
+                         element_ctx.add_named_variable(arg)
+                self._grammar_stack.append(element_ctx)
 
-            #print("Exited exec:", element)
+            elif type(element) == GrammarRefElement:
+                arglist = [NamedVariable(param.name) for param in element.value.param_list]
+                param_mapping = map_grammar_arguments(element.name, element.value.param_list, element.arg_list)
+                for arg in arglist:
+                    if arg.var_id in param_mapping:
+                        arg.assign(self.resolve_argument(param_mapping[arg.var_id]))
+                        element_ctx.add_named_variable(arg)
+            else:
+                pass
+            self._element_stack.append(element_ctx)
+
+    def exit(self, element_ctx: TokenHierarchyElement):
+        if element_ctx not in self._element_stack:
+            raise Exception("Context missing in stack. Recheck!!!")
+
+        element_ctx = [e for e in self._element_stack if e == element_ctx][0]
+
+        stack_ctx = self._element_stack.pop()
+        if element_ctx != stack_ctx:
+            raise Exception("Wrong context at top of stack. Recheck!!!")
+
+        element = element_ctx.element
+        parent_context = self._element_stack[-1] if self._element_stack else None
+        grammar_context = self._grammar_stack[-1] if self._grammar_stack else None
+        parent = parent_context.element if parent_context else None
+
+        position = element.position
+        if parent:
+            if isinstance(parent, AlternativeInputElement):
+                position = 0
+            elif parent.repeat_count > 1:
+                position = 0
+
+        numbered_arg = TokenVariable("$" + str(position + 1))
+        if len(element_ctx.input_sequence) == 1:
+            numbered_arg.assign(element_ctx.input_sequence[0])
         else:
-            pass #print("Exit call: Not found:", id(element), element)
+            numbered_arg.assign(element_ctx.input_sequence)
 
-class CliInterface():
+        if parent_context:
+            parent_context.add_numbered_variable(numbered_arg)
+
+        if element.post_match_binding:
+            self.execute_binding(element.post_match_binding)
+
+        if type(element) == NamedGrammar:
+            self._grammar_stack.pop()
+
+
+class CliInterface(StdStreamsHolder):
 
     def __init__(self, grammarset, stdin=None, stdout=None, stderr=None):
 
-        if not isinstance(grammarset, CompiledGrammarSet):
-            raise ValueError("CompiledGrammarSet object expected")
+        if not isinstance(grammarset, GrammarSpecification):
+            raise ValueError("GrammarSpecification object expected")
+
+        self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
 
         self._stdin = stdin
         self._stdout = stdout
@@ -439,24 +338,6 @@ class CliInterface():
         self._grammars = grammarset
         self._grammar_stack = []
         self._token_class_map = None
-
-    @property
-    def stdin(self):
-        return self._stdin if self._stdin is not None else sys.stdin
-
-    @property
-    def stdout(self):
-        return self._stdout if self._stdout is not None else sys.stdout
-
-    @property
-    def stderr(self):
-        return self._stderr if self._stderr is not None else sys.stderr
-
-    def print(self, *args):
-        print(*args, file=self.stdout)
-
-    def error(self, *args):
-        print(*args, file=self.stderr)
 
     @property
     def current_grammar(self):
@@ -578,9 +459,9 @@ class CliInterface():
 
         return None
 
-    def execute_binding_call(self, func_name, local_function, *args, **kwarg):
+    def execute_binding_call(self, func_name: str, local_function: bool, *args, **kwarg):
         try:
-            ext_args = [self.evaluate(arg) if arg is not None else None for arg in args]
+            ext_args = args
 
             if not local_function:
                 if not hasattr(self, self.get_cli_hook(func_name)):
@@ -591,52 +472,41 @@ class CliInterface():
             else:
                 res = self.resolve_local_function_call(func_name, *ext_args, **kwarg)
 
-            return BindingObject.create_object(res)
+            return res
         except Exception as e:
             self.error("Exception executing binding call:", type(e), e)
 
     def execute_success_sequence(self, matched_sequence, match_values, arglist):
 
-        exec_context = ExecContext(self, self.current_grammar, match_values, arglist)
+        exec_context = ExecContext(self, self.current_grammar, arglist)
 
         hierarchies = [token.get_element_hierarchy() for token in matched_sequence]
         token_values = match_values.copy()
-
-        # TODO: Position based hierarchy map for entry exit keys
-        # Hierarchy element should be a combination of position and element
-        # Might need for executing complex recursive grammars, though trivial ones passes with this.
 
         for _ in matched_sequence:
             hierarchy = hierarchies.pop(0)
             token_value = token_values.pop(0)
 
             h_copy = hierarchy.copy()
-            position_sequence = []
-            position_stack = []
             while h_copy:
                 parent = h_copy.pop()
-                position_sequence.append(parent.position)
-                position_stack.append(tuple(position_sequence))
-                exec_context.enter(parent, tuple(position_sequence), token_value)
+                exec_context.enter(parent, token_value)
 
             element = hierarchy.pop(0) if hierarchy else None
-            position_sequence = position_stack.pop() if position_stack else None
 
-            exec_context.exit(element, position_sequence)
+            exec_context.exit(element)
 
             parent = hierarchy.pop(0) if hierarchy else None
             while(element and parent):
-                if type(parent) in [AlternativeInputElement]:
-                    position_sequence = position_stack.pop() if position_stack else None
-                    exec_context.exit(parent, position_sequence)
-                elif len(parent) == (element.position + 1):
-                    position_sequence = position_stack.pop() if position_stack else None
-                    exec_context.exit(parent, position_sequence)
+                if type(parent.element) in [AlternativeInputElement]:
+                    exec_context.exit(parent)
+                elif len(parent.element) == (element.element.position + 1):
+                    exec_context.exit(parent)
                 else:
                     rest_optional = True
-                    position = element.position + 1
-                    while position < len(parent):
-                        next = parent.get(position)
+                    position = element.element.position + 1
+                    while position < len(parent.element):
+                        next = parent.element.get(position)
                         if next.mandatory:
                             rest_optional = False
                             break
@@ -645,23 +515,25 @@ class CliInterface():
                             break
                         position += 1
                     if rest_optional:
-                        position_sequence = position_stack.pop() if position_stack else None
-                        exec_context.exit(parent, position_sequence)
+                        exec_context.exit(parent)
                     else:
                         break
                 element = parent
                 parent = hierarchy.pop(0) if hierarchy else None
 
-        return [self.evaluate(v) for v in exec_context.root_arglist]
-
-    def evaluate(self, v):
-        if isinstance(v, BindingObject):
-            return v.value
-        if isinstance(v, BindingVariable):
-            return self.evaluate(v.value)
-        return v
+        return exec_context.root_arglist
 
     def match(self, tok_list, dry_run=False, last_token_complete=False, arglist=None):
+
+        if not arglist:
+            args = []
+        else:
+            args = []
+            for arg in arglist:
+                if isinstance(arg, CliArgument):
+                    args.append(arg)
+                else:
+                    args.append(CliArgument(arg))
 
         cur_token_input = None
         token_list = tok_list.copy()
@@ -816,11 +688,13 @@ class CliInterface():
                                 match_values = []
                                 for t in matching_sequences[0]:
                                     token = self.get_token(t.name)
-                                    match_values.append(token.get_value(tok_list[tok_index]))
+                                    match_value = token.get_value(tok_list[tok_index])
+                                    match_values.append(match_value)
                                     tok_index += 1
                                 res.matched_values = match_values
-                                root_arglist = self.execute_success_sequence(matching_sequences[0], match_values, arglist)
-                                for i in range(len(root_arglist)):
+                                root_arglist = self.execute_success_sequence(matching_sequences[0], match_values, args)
+                                arglen = len(arglist)
+                                for i in range(arglen):
                                     arglist[i] = root_arglist.pop(0)
                                 res.result = MATCH_SUCCESS
                             else:

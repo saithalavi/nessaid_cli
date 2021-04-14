@@ -9,7 +9,7 @@ token TEST_NUMBER RangedIntToken(1, 100); // Token to match integer between 1 an
 token STRING_TOKEN RangedStringToken(5, 10); // Token to match a string of length 5 to 10
 
 command1[$number_var]:
-	"command1"
+	"command\n1"
 	TEST_NUMBER
 	<<
 		print("Incoming number is:", $number_var); # This uses inline print function

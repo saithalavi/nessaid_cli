@@ -5,50 +5,27 @@
 # file included as part of this package.
 #
 
-import ply.lex as lex
-import ply.yacc as yacc
+from nessaid_cli.lex_yacc_common import NessaidCliLexerCommon, NessaidCliParserCommon
 
-from nessaid_cli.lex_yacc_common import NessaidCliLexerCommon
 from nessaid_cli.binding_parser.binding_objects import (
     BindingCode,
-    NamedVariable,
-    NumberedVariable,
+    AssignmentStatement,
     BindingCall,
     FunctionCall,
-    AssignmentStatement,
-    BindingIntObject,
-    BindingStrObject,
-    BindingBoolObject,
-    BindingFloatObject)
+    BindingStrObject
+)
 
 
 class NessaidCliBindingLexer(NessaidCliLexerCommon):
 
-    states = (
-        ('QUOTE','exclusive'),
-    )
-
     tokens = NessaidCliLexerCommon.tokens + (
         'CALL',
-        'OPEN_QUOTE',
-        'CLOSE_QUOTE',
-        'QUOTED_CONTENT',
-        'ESCAPED_CHAR',
-        'NEWLINE',
-        'ESCAPED_NEWLINE',
-        'LEXER_WARNING',
         'TRUE',
         'FALSE',
+        'NONE',
     )
 
-    t_ignore  = ' \t'
-    t_QUOTE_ignore = ""
-
-    def t_ignore_COMMENT(self, t):
-        count = self.count_newlines(t.value)
-        t.lexer.lineno += count
-
-    t_ignore_COMMENT.__doc__ = NessaidCliLexerCommon.REGEX_COMMENT
+    t_ignore_COMMENT = NessaidCliLexerCommon.common_COMMENT
 
     def t_TRUE(self, t):
         "True"
@@ -58,290 +35,152 @@ class NessaidCliBindingLexer(NessaidCliLexerCommon):
         "False"
         return t
 
-    def t_NEWLINE(self, t):
-        count = self.count_newlines(t.value)
-        t.lexer.lineno += count
-
-    t_NEWLINE.__doc__ = NessaidCliLexerCommon.REGEX_MULTI_NEWLINE
+    def t_NONE(self, t):
+        "None"
+        return t
 
     def t_CALL(self, t):
         "call"
         return t
 
-    def t_INITIAL_OPEN_QUOTE(self, t):
-        r'\"'
-        self.lexer.begin('QUOTE')
-        return t
-
-    def t_QUOTE_QUOTED_CONTENT(self, t):
-        r'([^"\n\\])+'
-        return t
-
-    def t_QUOTE_ESCAPED_CHAR(self, t):
-        r'\\([^\n\r])'
-        return t
-
-    def t_QUOTE_ESCAPED_NEWLINE(self, t):
-        count = self.count_newlines(t.value)
-        t.lexer.lineno += count
-
-    t_QUOTE_ESCAPED_NEWLINE.__doc__ = NessaidCliLexerCommon.REGEX_ESCAPED_NEWLINE
-
-    def t_QUOTE_CLOSE_QUOTE(self, t):
-        r'\"'
-        self.lexer.begin('INITIAL')
-        return t
-
-    def t_error(self, t):
-        print("INITIAL: Illegal character '%s'" % t.value[0])
-        t.lexer.skip(1)
-        t.message = "Illegal character {} while scanning code".format(repr(t.value[0]))
-        return t
-
-    def t_QUOTE_error(self, t):
-        print("QUOTE: Illegal character '%s'" % t.value[0])
-        t.lexer.skip(1)
-        self.lexer.begin('INITIAL')
-        return t
-
-    def __init__(self, filename="", starting_lineno=1):
-        self.lexer = lex.lex(module=self)
+    def __init__(self, filename="", starting_lineno=1, starting_linepos=0, stdin=None, stdout=None, stderr=None):
+        # Build the lexer
+        self._filename = filename
+        self._starting_lineno = starting_lineno
+        super().__init__(lineno=starting_lineno, linepos=starting_linepos, stdin=stdin, stdout=stdout, stderr=stderr)
 
 
-class ParserException(Exception):
-
-    def __init__(self, filename="", lineno='UNKNOWN', offending_char=None, offernding_token=None, message="", **kwargs):
-        self.filename = filename
-        self.lineno = lineno
-        self.offending_char = offending_char
-        self.offernding_token = offernding_token
-        self.message = message
-
-    def __str__(self):
-        error_info = {}
-        if self.offending_char:
-            error_info['offending_char'] = self.offending_char
-        if self.offernding_token:
-            error_info['offernding_token'] = self.offernding_token
-        return "{}:{}: {}{}".format(self.filename, self.lineno, self.message, "" if not error_info else " " + str(error_info))
-
-
-class LexerErrorException(ParserException):
-    pass
-
-class NessaidCliBindingParser():
+class NessaidCliBindingParser(NessaidCliParserCommon):
 
     tokens = NessaidCliBindingLexer.tokens
 
     def p_binding_content(self, t):
-        """grammar_file : empty
+        """binding_code : empty
                         | content"""
-        t1 = t[1]
-        t0 = BindingCode(t1) if t1 else BindingCode([])
-        """
-        print("\n"*5)
-        print("binding_content matched:", t0)
-        print("\n"*5)
-        """
-        t[0] = t0
-
-    def p_empty(self, t):
-        'empty :'
-        pass
+        binding_blocks = t[1]
+        binding_code = BindingCode(binding_blocks) if binding_blocks else BindingCode([])
+        t[0] = binding_code
 
     def p_content(self, t):
         """content : block
                    | content block"""
-        t[0] = [t[1]] if len(t) == 2 else t[1] + [t[2]]
-        #print("content matched:", t[0])
+        if len(t) == 2:
+            content = [t[1]]
+        else:
+            content = t[1]
+            block = t[2]
+            content.append(block)
+        t[0] = content
 
     def p_block(self, t):
         """block : assign_block SEMICOLON
                  | call_block SEMICOLON
                  | function_block SEMICOLON
-                 | parser_warning
                  | unused_token"""
         t[0] = t[1]
-        #print("Block matched:", t[0])
 
     def p_assign_block(self, t):
         """assign_block : lhs_block ASSIGN rhs_block"""
-        t[0] = AssignmentStatement(t[1], t[3])
-        #print("Assign block matched:", t[1], t[2], t[3])
+        assign_block = AssignmentStatement(t[1], t[3])
+        t[0] = assign_block
 
     def p_lhs_block(self, t):
-        """lhs_block : DOLLAR_VAR_ID"""
-        t[0] = NamedVariable(t[1])
-        #print("LHS matched:", t[1])
+        """lhs_block : dollar_name"""
+        lhs_block = t[1]
+        t[0] = lhs_block
 
     def p_rhs_block(self, t):
-        """rhs_block : dollar_id
-                     | call_block
-                     | quoted_string
-                     | number
-                     | boolean_true
-                     | boolean_false
-                     | function_block"""
-        t[0] = t[1]
-        #print("RHS matched:", t[1])
-
-    def p_dollar_id(self, t):
-        """dollar_id : dollar_name
-                     | dollar_number"""
-        t[0] = t[1]
-        #print("dollar_id:", t[1])
-
-    def p_dollar_name(self, t):
-        'dollar_name : DOLLAR_VAR_ID'
-        t[0] = NamedVariable(t[1])
-
-    def p_dollar_number(self, t):
-        'dollar_number : DOLLAR_NUMBER_ID'
-        t[0] = NumberedVariable(t[1])
+        """rhs_block : argument"""
+        argument = t[1]
+        t[0] = argument
 
     def p_call_block(self, t):
-        """call_block : CALL identifier argument_block
-                      | CALL identifier"""
+        """call_block : CALL identifier argument_block"""
         if len(t) == 4:
-            t[0] = BindingCall(t[2], t[3])
-            #print("Call block matched:", t[2], t[3])
+            call_block = BindingCall(t[2], t[3])
         else:
-            t[0] = BindingCall(t[2], [])
-            #print("Call block matched:", t[2])
+            call_block = BindingCall(t[2], [])
+        t[0] = call_block
 
     def p_function_block(self, t):
-        """function_block : identifier
-                          | identifier argument_block"""
+        """function_block : identifier argument_block"""
         if len(t) == 2:
-            t[0] = FunctionCall(t[1], [])
-            #print("Function block matched:", t[1])
+            function_block = FunctionCall(t[1], [])
         else:
-            t[0] = FunctionCall(t[1], t[2])
-            #print("Function block matched:", t[1], t[2])
+            function_block = FunctionCall(t[1], t[2])
+        t[0] = function_block
+
+    def p_identifier(self, t):
+        """identifier : IDENTIFIER
+                      | usable_keywords"""
+        identifier = t[1]
+        t[0] = identifier
+
+    def p_usable_keywords(self, t):
+        """usable_keywords : CALL
+                           | TRUE
+                           | FALSE
+                           | NONE"""
+        keyword = t[1]
+        t[0] = keyword
 
     def p_argument_block(self, t):
         """argument_block : LPAREN optional_argument_list RPAREN"""
-        t0 = t[2]
-        t[0] = t0
+        argument_list = t[2]
+        t[0] = argument_list
 
     def p_optional_argument_list(self, t):
         """optional_argument_list : argument_list
                                   | empty"""
-        t1 = t[1]
-        if t1 is None:
-            t0 = []
-        else:
-            t0 = t1
-        t[0] = t0
+        argument_list = t[1]
+        if argument_list is None:
+            argument_list = []
+        t[0] = argument_list
 
     def p_argument_list(self, t):
         """argument_list : argument_list COMMA argument
                          | argument"""
-        t1 = t[1]
+        arguments = t[1]
         if len(t) == 2:
-            t0 = [t1]
+            arguments = [arguments]
         else:
-            t3 = t[3]
-            t1.append(t3)
-            t0 = t1
-        t[0] = t0
+            argument = t[3]
+            arguments.append(argument)
+        t[0] = arguments
 
     def p_argument(self, t):
         """argument : dollar_id
-                    | number
-                    | quoted_string
-                    | boolean_true
-                    | boolean_false
                     | call_block
-                    | function_block"""
-        t0 = t[1]
-        t[0] = t0
+                    | function_block
+                    | binding_object"""
+        argument = t[1]
+        t[0] = argument
 
-    def p_number(self, t):
-        """number : integer
-                  | float"""
-        t0 = t[1]
-        t[0] = t0
+    def p_binding_object(self, t):
+        """binding_object : number
+                          | string_object
+                          | boolean_true
+                          | boolean_false
+                          | none_object"""
+        binding_object = t[1]
+        t[0] = binding_object
+
+    def p_string_object(self, t):
+        """string_object : quoted_string"""
+        quoted_str = t[1][1:-1]
+        t[0] = BindingStrObject(quoted_str)
 
     def p_boolean_true(self, t):
         """boolean_true : TRUE"""
-        t[0] = BindingBoolObject(True)
+        t[0] = True
 
     def p_boolean_false(self, t):
         """boolean_false : FALSE"""
-        t[0] = BindingBoolObject(False)
+        t[0] = False
 
-    def p_integer(self, t):
-        """integer : INTEGER"""
-        t1 = t[1]
-        try:
-            t0 = int(t1)
-        except Exception:
-            t0 = 0
-        t[0] = BindingIntObject(t0)
-
-    def p_float(self, t):
-        """float : FLOAT"""
-        t1 = t[1]
-        try:
-            t0 = float(t1)
-        except Exception:
-            t0 = 0.0
-        t[0] = BindingFloatObject(t0)
-
-    def p_identifier(self, t):
-        """identifier : IDENTIFIER"""
-        t[0] = t[1]
-
-    def p_quoted_string(self, t):
-        'quoted_string : OPEN_QUOTE quote_body CLOSE_QUOTE'
-        t2 = t[2]
-
-        t2s = t2.split("\\\\")
-
-        replace_patterns = {
-            '\\"': '"',
-            "\\n": "\n",
-            "\\r": "\r",
-            "\\t": "\t",
-        }
-
-        for k, v in replace_patterns.items():
-            t2s = [t.replace(k, v) for t in t2s]
-
-        t2 = "\\".join(t2s)
-
-        t[0] = BindingStrObject(t2)
-
-    def p_quote_body(self, t):
-        """quote_body : quote_text
-                      | empty"""
-        t1 = t[1]
-        if t1 is None:
-            t0 = ""
-        else:
-            t0 = t1
-        t[0] = t0
-
-    def p_quote_text(self, t):
-        '''quote_text : quote_text quote_segment
-                      | quote_segment'''
-
-        t1 = t[1]
-        if len(t) == 2:
-            t0 = t1
-        else:
-            t2 = t[2]
-            t0 = t1 + t2
-        t[0] = t0
-
-    def p_quote_segment(self, t):
-        """quote_segment : QUOTED_CONTENT
-                         | ESCAPED_CHAR"""
-        t1 = t[1]
-        #if t1 in ["\\\\", "\\\""]:
-        #    t1 = t1[1:]
-        t[0] = t1
+    def p_none_object(self, t):
+        """none_object : NONE"""
+        t[0] = None
 
     def p_unused_token(self, t):
         """unused_token : ESCAPED_NEWLINE
@@ -354,54 +193,26 @@ class NessaidCliBindingParser():
                         | LBRACE
                         | RBRACE
                         | MULTIPLY
-                        | eof
-                        | """
-        print("Syntax error (Unused token) at '%s'" % t.value)
+                        | eof"""
+        #print("Syntax error (Unused token) at '%s'" % t.value)
+        print("Syntax error (Unused token)")
+        pass
 
-    def p_parser_warning(self, t):
-        """parser_warning : LEXER_WARNING"""
-        print("Warning:", t.value)
-
-    def p_error(self, t):
-        if not t:
-            return None
-        if t.type == 'error':
-            if t:
-                raise LexerErrorException(
-                    filename = self.filename,
-                    lineno=t.lineno,
-                    offending_char=t.value[0],
-                    message=t.message)
-            else:
-                raise LexerErrorException(
-                    filename = self.filename,
-                    message="Unknown lexer error"
-                )
-        else:
-            raise ParserException(
-                filename = self.filename,
-                lineno=t.lineno,
-                offernding_token=t.value,
-                message="Syntax error"
-            )
-
-    def __init__(self, filename="", starting_lineno=1):
-        self.filename = filename
-        self.starting_lineno = starting_lineno
-        self.lexer = NessaidCliBindingLexer(filename=filename, starting_lineno=starting_lineno)
-        self.parser = yacc.yacc(module=self, debug=False, write_tables=False)
+    def __init__(self, filename="", starting_lineno=1, stdin=None, stdout=None, stderr=None):
+        self._filename = filename
+        self._starting_lineno = starting_lineno
+        self._lexer = NessaidCliBindingLexer(filename=filename, starting_lineno=starting_lineno)
+        super().__init__(stdin=stdin, stdout=stdout, stderr=stderr)
 
     def parse(self, input_str):
         try:
+            self.lexer.enter_state(NessaidCliLexerCommon.INITIAL_STATE)
             code = self.parser.parse(input_str, lexer=self.lexer.lexer)
             if not isinstance(code, BindingCode):
                 errmsg = "Expected {} got {}".format("BindingCode", code if not code else type(code))
                 return False, errmsg
             return True, code
-        except LexerErrorException as e:
-            print("Error:", e)
-            return False, str(e)
-        except ParserException as e:
+        except Exception as e:
             print("Error:", e)
             return False, str(e)
 

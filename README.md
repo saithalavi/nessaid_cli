@@ -99,13 +99,13 @@ test_grammar2:
     ;
 ```
 it will match any string followed by an integer between -100 and 200
-    
+
 ### Optional tokens
 Any token or combination of tokens can be made optional by enclosing them in braces. For example modifying the above example,
 ```
 test_grammar:
     "test-string-constant-token"
-    { token1 } 
+    { token1 }
     token2
     ;
 ```
@@ -147,7 +147,7 @@ test_grammar:
     ) * 2
     ;
 ```
-will match 
+will match
 ```
 token1 token2 token1 token2
 ```
@@ -166,7 +166,7 @@ grammar1[$var]:
     "grammar1"
     <<$var = "From grammar 1";>>
     ;
-    
+
 grammar2[$var]:
     "grammar2"
     <<$var = $1;>>
@@ -732,14 +732,12 @@ nessaid-cmd # ex <ENTER>
 Note the parameters in the generated method grammars. They are dummy as of now.
 
 ## TODO
-* Write a test suite for the package
 * Add support for non interactive processing, including processing a file content
 * Support for importing other grammar files. The parser supports import statements but processing is not there.
 * Add some kind of privilege states for tokens so that tokens will be matched only if the privilege level of the CLI instance is higher than that of the token.
 * Compiler to generate a json or similar format for compiled grammar so that it can be loaded to CLI processors. Now the python parsed tree is used. If we can convert between json and the parse tree, I think it will be good to use across different languages as implementation of the compiler might be tedious in all languages.
 * A proper way to feed variables to Cmd method grammars from calling python code
 * Expensive validation and checks for recursive grammars. Basic recursive grammars are tested.
-* Enhancement in executing the binding actions when the grammar matches. Existing implementation might cause issues with complex recursive grammars.
 * Enhancement of the parsers to track the syntax and parsing errors clearly with line and column numbers. The current implementation on the part is partial. Sometimes, tough to track the grammar mistakes.
 * Support for more inline functions and types. May be a way to register inline functions.
 * Enhance NessaidCli to support Cli context stack, with each CLI context having dedicated prompt and environment

@@ -11,6 +11,12 @@ import fnmatch
 import platform
 from pathlib import Path
 
+from nessaid_cli.utils import (
+    ESCAPED_CHAR_INPUTS,
+    convert_to_cli_string,
+    convert_to_python_string
+)
+
 
 MATCH_SUCCESS = 'success'
 MATCH_FAILURE = 'failure'
@@ -20,39 +26,14 @@ MATCH_AMBIGUOUS = 'ambigous'
 TOO_MANY_COMPLETIONS = -1
 
 
-class TokenClassDef():
-
-    def __init__(self, classname, arglist):
-        self._classname = classname
-        self._arglist = arglist
-
-    @property
-    def classname(self):
-        return self._classname
-
-    @property
-    def arglist(self):
-        return self._arglist
-
-    def as_dict(self):
-        return {
-            "classname": self._classname,
-            "arglist": self._arglist
-        }
-
-    @staticmethod
-    def from_dict(d):
-        elem = TokenClassDef(d["classname"], d["arglist"])
-        return elem
-
-
 class CliToken():
 
     def __init__(self, name):
         self._name = name
+        self._cli_string = convert_to_cli_string(name)
 
     def __repr__(self):
-        return self._name
+        return self._cli_string
 
     def __str__(self):
         return self.__repr__()
@@ -65,12 +46,12 @@ class CliToken():
         if self.completable:
             _, completions = self.complete(match_string)
             if len(completions) == 1:
-                return completions[0]
+                return convert_to_python_string(completions[0])
             elif self.match(match_string) == MATCH_SUCCESS:
-                return match_string
+                return convert_to_python_string(match_string)
         else:
             if self.match(match_string) == MATCH_SUCCESS:
-                return match_string
+                return convert_to_python_string(match_string)
         raise ValueError("Fix matching logic for this token: {}".format(self.__class__.__name__))
 
     @property
@@ -79,25 +60,25 @@ class CliToken():
 
     @property
     def helpstring(self):
-        return self._name
+        return self._cli_string
 
     @property
     def completable(self):
         return True
 
     def match(self, token_input):
-        if self._name == token_input:
+        if self._cli_string == token_input:
             return MATCH_SUCCESS
-        elif self._name.startswith(token_input):
+        elif self._cli_string.startswith(token_input):
             return MATCH_PARTIAL
         else:
             return MATCH_FAILURE
 
     def complete(self, token_input):
         if not token_input:
-            return 1, [self._name]
-        elif self._name.startswith(token_input):
-            return 1, [self._name]
+            return 1, [self._cli_string]
+        elif self._cli_string.startswith(token_input):
+            return 1, [self._cli_string]
         else:
             return 0, []
 
@@ -114,10 +95,11 @@ class AlternativeStringsToken(CliToken):
             self._alternatives = [alternatives] + list(args)
         else:
             self._alternatives = []
+        self._cli_strings = [convert_to_cli_string(s) for s in self._alternatives]
 
     @property
     def helpstring(self):
-        return "Any one of: {}".format(set(self._alternatives))
+        return "Any one of: {}".format(set(self._cli_strings))
 
     @property
     def completable(self):
@@ -125,15 +107,19 @@ class AlternativeStringsToken(CliToken):
 
     def complete(self, token_input):
         if not token_input:
-            return len(self._alternatives), list(self._alternatives)
+            return len(self._cli_strings), list(self._cli_strings)
         completions = set()
-        for e in self._alternatives:
+        for e in self._cli_strings:
             if token_input and e.startswith(token_input):
                 completions.add(e)
         return len(completions), list(completions)
 
+    def get_value(self, match_string=None):
+        v = super().get_value(match_string)
+        return v
+
     def match(self, token_input):
-        if token_input and token_input in  self._alternatives:
+        if token_input and token_input in self._cli_strings:
             return MATCH_SUCCESS
         n, completions = self.complete(token_input)
         if n == TOO_MANY_COMPLETIONS:

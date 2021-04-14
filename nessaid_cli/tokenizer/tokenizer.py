@@ -5,259 +5,182 @@
 # file included as part of this package.
 #
 
+import traceback
+
 import ply.lex as lex
 import ply.yacc as yacc
 
+from nessaid_cli.utils import StdStreamsHolder, ExtendedString
 
-class NessaidCliTokenizerLexer():
 
-    states = (
-        ('QUOTE','exclusive'),
-    )
+class TokenizerIllegalCharError(Exception):
+
+    def __init__(self, msg, token=None):
+        self.token = token
+        super().__init__(msg)
+
+
+class TokenizerSyntaxError(Exception):
+
+    def __init__(self, msg, token=None):
+        self.token = token
+        super().__init__(msg)
+
+
+class TokenizerException(Exception):
+
+    def __init__(self, msg, token=None):
+        self.token = token
+        super().__init__(msg)
+
+
+class TokenInputString(ExtendedString):
+
+    def __init__(self, value, lexpos, lexlen, quoted=False, quote_incomplete=False):
+        if quote_incomplete is True:
+            quoted = True
+        super().__init__(value, lexpos=lexpos, lexlen=lexlen, quoted=quoted, quote_incomplete=quote_incomplete)
+
+
+class NessaidCliTokenizerLexer(StdStreamsHolder):
 
     tokens = (
-        'COLON',
-        'SEMICOLON',
-        'LPAREN',
-        'RPAREN',
-        'LBRACE',
-        'RBRACE',
-        'LBRACKET',
-        'RBRACKET',
-        'IDENTIFIER',
         'TEXT',
-        'OR',
-        'AND',
-        'OPEN_QUOTE',
-        'CLOSE_QUOTE',
-        'QUOTED_CONTENT',
-        'ESCAPED_CHAR',
-        'NEWLINE',
-        'ESCAPED_NEWLINE',
-        'eof'
+        'QUOTED_STR',
+        'QUOTED_INCOMPLETE_STR',
     )
-
-    t_LPAREN      = r'\('
-    t_RPAREN      = r'\)'
-    t_LBRACE      = r'\{'
-    t_RBRACE      = r'\}'
-    t_LBRACKET    = r'\['
-    t_RBRACKET    = r'\]'
-    t_IDENTIFIER  = r'[A-Za-z_][-a-zA-Z0-9]*'
-
-    t_OR          = r'\|'
-    t_AND         = r'\&'
-    t_COLON       = r':'
-    t_SEMICOLON   = r';'
-    t_NEWLINE     = r'(\n|\r\n|\r)+'
-
-    t_ignore  = ' \t'
-    t_QUOTE_ignore = ""
-
-
-    def t_INITIAL_OPEN_QUOTE(self, t):
-        r'\"'
-        self.lexer.begin('QUOTE')
-        """
-        print("\n"*2)
-        print("t:", t)
-        print("t.value:", t.value)
-        print("\n"*2)
-        """
-        return t
 
     def t_TEXT(self, t):
         r'([^"\n\\ \t])+'
-        #print("\n"*2)
-        #print("t:", t)
-        #print("t.value:", t.value)
-        #print("\n"*2)
+        t.value = TokenInputString(t.value, t.lexpos, len(t.value))
         return t
 
-    def t_QUOTE_QUOTED_CONTENT(self, t):
-        r'([^"\n\\])+'
-        #print("\n"*2)
-        #print("t:", t)
-        #print("t.value:", t.value)
-        #print("\n"*2)
+    def t_QUOTED_STR(self, t):
+        r'(")(([^"\n\r\t\\\0])|((\\\\)|(\\)(0|n|r|t|b|v|a|")))*(")'
+        t.value = TokenInputString(t.value, t.lexpos, len(t.value), quoted=True)
         return t
 
-    def t_QUOTE_ESCAPED_CHAR(self, t):
-        r'\\([^\n\r])'
-        #print("\n"*2)
-        #print("t:", t)
-        #print("t.value:", t.value)
-        #print("\n"*2)
+    def t_QUOTED_INCOMPLETE_STR(self, t):
+        r'(")(([^"\n\r\t\\\0])|((\\\\)|(\\)(0|n|r|t|b|v|a|")))*(\\)?'
+        t.value = TokenInputString(t.value, t.lexpos, len(t.value), quote_incomplete=True)
         return t
 
-    def t_QUOTE_ESCAPED_NEWLINE(self, t):
-        r'\\(\n|\r\n|\r)+'
-        #print("\n"*2)
-        #print("t:", t)
-        #print("t.value:", t.value)
-        #print("\n"*2)
-        pass
+    @property
+    def lexer(self):
+        return self._lexer
 
-    def t_QUOTE_CLOSE_QUOTE(self, t):
-        r'\"'
-        self.lexer.begin('INITIAL')
-        """
-        print("\n"*2)
-        print("t:", t)
-        print("t.value:", t.value)
-        print("\n"*2)
-        """
-        return t
+    def __init__(self, stdin=None, stdout=None, stderr=None):
+        self._lexer = None
+        self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
+        self._lexer = lex.lex(module=self)
 
-    def t_eof(self, t):
-        return None
+    t_ignore  = ' \t'
 
     def t_error(self, t):
-        print("INITIAL: Illegal character '%s'" % t.value[0])
-        t.lexer.skip(1)
-
-    def t_QUOTE_error(self, t):
-        #print(t.value)
-        print("QUOTE: Illegal character '%s'" % t.value[0])
-        t.lexer.skip(1)
-        self.lexer.begin('INITIAL')
-
-    def __init__(self, filter_special_chars=None):
-        self.adjust_token_rules(filter_special_chars)
-        self.lexer = lex.lex(module=self)
-
-    def adjust_token_rules(self, filter_chars):
-        pass
+        raise TokenizerIllegalCharError("Illegal character: '{}'".format(t.value[0]), token=t.value[0])
 
 
-class NessaidCliTokenizer():
+class NessaidCliTokenizer(StdStreamsHolder):
 
     tokens = NessaidCliTokenizerLexer.tokens
 
-    def __init__(self):
-        self.lexer = NessaidCliTokenizerLexer()
-        self.parser = yacc.yacc(module=self, debug=False, write_tables=False)
+    @property
+    def lexer(self):
+        return self._lexer
+
+    @property
+    def parser(self):
+        return self._parser
+
+    def __init__(self, stdin=None, stdout=None, stderr=None):
+        self._lexer = None
+        self._parser = None
+        self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
+
+        self._lexer = NessaidCliTokenizerLexer(stdin=stdin, stdout=stdout, stderr=stderr)
+        self._parser = yacc.yacc(module=self, debug=False, write_tables=False)
 
     def parse(self, input_str):
-        self.lexer.lexer.begin('INITIAL')
-        return self.parser.parse(input_str, lexer=self.lexer.lexer)
+        try:
+            return self.parser.parse(input_str, lexer=self.lexer.lexer)
+        except TokenizerIllegalCharError as e:
+            error_msg = "Illegal character error while tokenizing." + " Token: {}".format(e.token) if e.token else ""
+            raise TokenizerException(error_msg, token=e.token)
+        except TokenizerSyntaxError as e:
+            error_msg = "Syntax error while tokenizing." + " Token: {}".format(e.token) if e.token else ""
+            raise TokenizerException(error_msg, token=e.token)
+        except Exception as e:
+            error_msg = "Exception while tokenizing: {}".format(str(e)) + " Token: {}".format(e.token) if e.token else ""
+            return e
 
     def p_line_content(self, t):
-        """line_content : input empty
-                        | unused_token"""
-        t0 = t[1]
-        t[0] = t0
-
-    def p_error(self, t):
-        if t:
-            print("Syntax error at '%s'" % t.value)
-        t[0] = []
-
-    def p_unused_token(self, t):
-        """unused_token : ESCAPED_NEWLINE
-                        | NEWLINE
-                        | AND
-                        | eof
-                        | COLON
-                        | IDENTIFIER
-                        | LBRACE
-                        | LBRACKET
-                        | LPAREN
-                        | OR
-                        | RBRACE
-                        | RBRACKET
-                        | RPAREN
-                        | SEMICOLON"""
-        print("Syntax error (Unused token) at '%s'" % t.value)
-        t[0] = []
-
-    def p_input(self, t):
-        'input : line'
-        t0 = t[1]
-        t[0] = t0
+        """line_content : line empty"""
+        line = t[1]
+        t[0] = line
 
     def p_line(self, t):
         """line : line segment
                 | empty"""
-        t1 = t[1]
-        if t1 is None:
-            t0 = []
+        line = t[1]
+        if line is None:
+            line = []
         else:
-            t2 = t[2]
-            t0 = t1 + [t2]
-        t[0] = t0
+            segment = t[2]
+            line.append(segment)
+        t[0] = line
 
     def p_segment(self, t):
-        """segment : TEXT
+        """segment : text
                    | quoted_string
                    | incomplete_quoted_string"""
-        t1 = t[1]
-        t[0] = t1
+        segment = t[1]
+        t[0] = segment
 
     def p_quoted_string(self, t):
-        'quoted_string : incomplete_quoted_string CLOSE_QUOTE'
-        t[0] = t[1] + '"'
+        'quoted_string : QUOTED_STR'
+        quoted_string = t[1]
+        t[0] = quoted_string
 
     def p_incomplete_quoted_string(self, t):
-        'incomplete_quoted_string : OPEN_QUOTE quote_body'
-        t2 = t[2]
+        'incomplete_quoted_string : QUOTED_INCOMPLETE_STR'
+        quoted_string = t[1]
+        t[0] = quoted_string
 
-        t2s = t2.split("\\\\")
-
-        replace_patterns = {
-            '\\"': '"',
-            "\\n": "\n",
-            "\\r": "\r",
-            "\\t": "\t",
-        }
-
-        for k, v in replace_patterns.items():
-            t2s = [t.replace(k, v) for t in t2s]
-
-        t2 = "\\".join(t2s)
-
-        t[0] = '"' + t2
-
-    def p_quote_body(self, t):
-        """quote_body : quote_text
-                      | empty"""
-        t1 = t[1]
-        if t1 is None:
-            t0 = ""
-        else:
-            t0 = t1
-        t[0] = t0
-
-    def p_quote_text(self, t):
-        '''quote_text : quote_text quote_segment
-                      | quote_segment'''
-
-        t1 = t[1]
-        if len(t) == 2:
-            t0 = t1
-        else:
-            t2 = t[2]
-            t0 = t1 + t2
-        t[0] = t0
-
-    def p_quote_segment(self, t):
-        """quote_segment : QUOTED_CONTENT
-                         | ESCAPED_CHAR"""
-        t1 = t[1]
-        # if t1 in ["\\\\", "\\\""]:
-        #     t1 = t1[1:]
-        t[0] = t1
+    def p_text(self, t):
+        'text : TEXT'
+        text = t[1]
+        t[0] = text
 
     def p_empty(self, t):
         'empty :'
         pass
 
+
 def tokenize(input_str):
     parser = NessaidCliTokenizer()
-    return parser.parse(input_str)
+    tokens = []
+    try:
+        tokens = parser.parse(input_str)
+    except TokenizerException as e:
+        parser.error("Failed to tokenize input:", e)
+    except Exception as e:
+        parser.error("Exception tokenizing input: {}\nException: {}: {}".format(input_str, type(e), e))
+    return tokens
+
+
+def test_main():
+    while True:
+        try:
+            line = input("Test: ")
+            tokens = tokenize(line)
+            print("Line:", line)
+            print("Tokens:", tokens)
+            print("Tokens Inputs:", [t.value for t in tokens])
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print("Exception:", type(e), e)
+
 
 if __name__ == '__main__':
-    while True:
-        line = input("Test: ")
-        tokens = tokenize(line)
-        print("Tokens:", tokens)
+    test_main()
