@@ -94,7 +94,7 @@ class AlternativeStringsToken(CliToken):
         elif args:
             self._alternatives = [alternatives] + list(args)
         else:
-            self._alternatives = []
+            self._alternatives = [alternatives]
         self._cli_strings = [convert_to_cli_string(s) for s in self._alternatives]
 
     @property
