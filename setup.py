@@ -70,7 +70,7 @@ if os.name == 'nt':
 
 setup(
     name=pkg_name,
-    version='2.0.0',
+    version='2.0.1',
     url='https://github.com/saithalavi/nessaid_cli',
     description="Nessaid's CLI tools",
     long_description=long_description,
