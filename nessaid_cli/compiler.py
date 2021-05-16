@@ -141,7 +141,8 @@ class NessaidCliParser(NessaidCliParserCommon):
 
     def p_block(self, t):
         """block : named_grammar
-                 | token_block"""
+                 | token_block
+                 | unused_token"""
         grammar = t[1]
         block = grammar
         t[0] = block
@@ -634,6 +635,17 @@ class NessaidCliParser(NessaidCliParserCommon):
                            | number"""
         parameter_value = t[1]
         t[0] = parameter_value
+
+    def p_unused_token(self, t):
+        """unused_token : eof
+                        | AND
+                        | NEWLINE
+                        | ESCAPED_NEWLINE
+                        | SINGLE_BACKSLASH
+                        | QUOTED_INCOMPLETE_STR
+                        | quoted_split_string"""
+        print("Syntax error (Unused token)")
+        self.p_error(t)
 
     def parse(self, input_str):
         self.lexer.enter_state(NessaidCliLexer.INITIAL_STATE)

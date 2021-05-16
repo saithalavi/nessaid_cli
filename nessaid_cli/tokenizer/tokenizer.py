@@ -155,6 +155,9 @@ class NessaidCliTokenizer(StdStreamsHolder):
         'empty :'
         pass
 
+    def p_error(self, t):
+        raise Exception("Error parsing input line")
+
 
 def tokenize(input_str):
     parser = NessaidCliTokenizer()

@@ -234,8 +234,6 @@ class ExecContext():
 
                     if lhs:
                         rhs = self.resolve_argument(block.rhs)
-
-                    if lhs and rhs:
                         lhs.assign(rhs)
 
                 elif isinstance(block, BindingCall):
@@ -510,9 +508,14 @@ class CliInterface(StdStreamsHolder):
                         if next.mandatory:
                             rest_optional = False
                             break
-                        elif hierarchies and next in hierarchies[0]:
-                            rest_optional = False
-                            break
+                        if hierarchies:
+                            rest_optional = True
+                            for h in hierarchies[0]:
+                                if h.element == next:
+                                    rest_optional = False
+                                    break
+                            if not rest_optional:
+                                break
                         position += 1
                     if rest_optional:
                         exec_context.exit(parent)

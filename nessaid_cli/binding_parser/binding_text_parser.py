@@ -193,8 +193,11 @@ class NessaidCliBindingParser(NessaidCliParserCommon):
                         | LBRACE
                         | RBRACE
                         | MULTIPLY
+                        | ESCAPED_CHAR
+                        | SINGLE_BACKSLASH
+                        | QUOTED_INCOMPLETE_STR
+                        | quoted_split_string
                         | eof"""
-        #print("Syntax error (Unused token) at '%s'" % t.value)
         print("Syntax error (Unused token)")
         pass
 
