@@ -1,0 +1,29 @@
+Version 2.1.0:
+
+    Added asynchronous CLI handlers
+    Added support for blocking and asynchronous input extraction while running CLI. Input can be plain or masked
+
+    Demo: code in example/example_v2.1.0.py
+    PS D:\nessaid_cli_fixes\nessaid_cli> python.exe test.py
+    Starting Nessaid CMD Demo
+    nessaid-cmd # asy
+    async
+    async-input
+    nessaid-cmd # async-
+    async-input
+    nessaid-cmd # async-input
+    cli:
+    Cli Code Input (cli print): asdf        123
+    python: 1234    5
+    Cli Code Input (python print): asdf     123
+    Python Code Input: 1234 5
+    nessaid-cmd # blo
+    blocking-input
+    nessaid-cmd # blocking-input
+    cli: asdf       123
+    Cli Code Input (cli print): asdf        123
+    python:
+    Cli Code Input (python print): asdf     123
+    Python Code Input: 1234 5
+    nessaid-cmd # q
+    PS D:\nessaid_cli_fixes\nessaid_cli>

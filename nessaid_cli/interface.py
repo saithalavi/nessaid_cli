@@ -6,6 +6,7 @@
 #
 
 import sys
+import asyncio
 
 from nessaid_cli.utils import StdStreamsHolder, convert_to_python_string
 
@@ -187,25 +188,25 @@ class ExecContext():
                 return parent_context.token_variables[var]
         return None
 
-    def resolve_argument(self, argument):
+    async def resolve_argument(self, argument):
         if type(argument) in [DollarVariable, DollarNumber]:
             return self.resolve_variable(argument)
         elif type(argument) is CliArgument:
-            return self.resolve_argument(argument.value)
+            return await self.resolve_argument(argument.value)
         elif type(argument) == BindingCall:
             ext_fn = argument.name
-            arglist = [self.evaluate(arg) for arg in argument.arglist]
-            call_res = self._interface.execute_binding_call(ext_fn, False, *arglist)
+            arglist = [await self.evaluate(arg) for arg in argument.arglist]
+            call_res = await self._interface.execute_binding_call(ext_fn, False, *arglist)
             return call_res
         elif type(argument) == FunctionCall:
             ext_fn = argument.name
-            arglist = [self.evaluate(arg) for arg in argument.arglist]
-            call_res = self._interface.execute_binding_call(ext_fn, True, *arglist)
+            arglist = [await self.evaluate(arg) for arg in argument.arglist]
+            call_res = await self._interface.execute_binding_call(ext_fn, True, *arglist)
             return call_res
         return argument
 
-    def evaluate(self, arg):
-        res_arg = self.resolve_argument(arg)
+    async def evaluate(self, arg):
+        res_arg = await self.resolve_argument(arg)
         if isinstance(res_arg, BindingVariable):
             res = res_arg.value
         else:
@@ -215,7 +216,7 @@ class ExecContext():
             res = convert_to_python_string(res)
         return res
 
-    def execute_binding(self, binding_code):
+    async def execute_binding(self, binding_code):
 
         grammar_context = self._grammar_stack[-1] if self._grammar_stack else None
 
@@ -233,19 +234,19 @@ class ExecContext():
                         lhs = self.resolve_variable(block.lhs)
 
                     if lhs:
-                        rhs = self.resolve_argument(block.rhs)
+                        rhs = await self.resolve_argument(block.rhs)
                         lhs.assign(rhs)
 
                 elif isinstance(block, BindingCall):
                     ext_fn = block.name
-                    arglist = [self.evaluate(arg) for arg in block.arglist]
-                    _ = self._interface.execute_binding_call(ext_fn, False, *arglist)
+                    arglist = [await self.evaluate(arg) for arg in block.arglist]
+                    _ = await self._interface.execute_binding_call(ext_fn, False, *arglist)
                 elif isinstance(block, FunctionCall):
                     ext_fn = block.name
-                    arglist = [self.evaluate(arg) for arg in block.arglist]
-                    _ = self._interface.execute_binding_call(ext_fn, True, *arglist)
+                    arglist = [await self.evaluate(arg) for arg in block.arglist]
+                    _ = await self._interface.execute_binding_call(ext_fn, True, *arglist)
 
-    def enter(self, element_ctx: TokenHierarchyElement, token_value: str):
+    async def enter(self, element_ctx: TokenHierarchyElement, token_value: str):
 
         if element_ctx in self._element_stack:
             element_ctx = [e for e in self._element_stack if e == element_ctx][0]
@@ -258,7 +259,7 @@ class ExecContext():
             element = element_ctx.element
 
             if element.pre_match_binding:
-                self.execute_binding(element.pre_match_binding)
+                await self.execute_binding(element.pre_match_binding)
 
             if type(element) == NamedGrammar:
                 if not self._element_stack:
@@ -275,13 +276,14 @@ class ExecContext():
                 param_mapping = map_grammar_arguments(element.name, element.value.param_list, element.arg_list)
                 for arg in arglist:
                     if arg.var_id in param_mapping:
-                        arg.assign(self.resolve_argument(param_mapping[arg.var_id]))
+                        res = await self.resolve_argument(param_mapping[arg.var_id])
+                        arg.assign(res)
                         element_ctx.add_named_variable(arg)
             else:
                 pass
             self._element_stack.append(element_ctx)
 
-    def exit(self, element_ctx: TokenHierarchyElement):
+    async def exit(self, element_ctx: TokenHierarchyElement):
         if element_ctx not in self._element_stack:
             raise Exception("Context missing in stack. Recheck!!!")
 
@@ -313,7 +315,7 @@ class ExecContext():
             parent_context.add_numbered_variable(numbered_arg)
 
         if element.post_match_binding:
-            self.execute_binding(element.post_match_binding)
+            await self.execute_binding(element.post_match_binding)
 
         if type(element) == NamedGrammar:
             self._grammar_stack.pop()
@@ -321,10 +323,12 @@ class ExecContext():
 
 class CliInterface(StdStreamsHolder):
 
-    def __init__(self, grammarset, stdin=None, stdout=None, stderr=None):
+    def __init__(self, loop, grammarset, stdin=None, stdout=None, stderr=None):
 
         if not isinstance(grammarset, GrammarSpecification):
             raise ValueError("GrammarSpecification object expected")
+
+        self._loop = loop
 
         self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
 
@@ -336,6 +340,10 @@ class CliInterface(StdStreamsHolder):
         self._grammars = grammarset
         self._grammar_stack = []
         self._token_class_map = None
+
+    @property
+    def loop(self):
+        return self._loop
 
     @property
     def current_grammar(self):
@@ -392,7 +400,7 @@ class CliInterface(StdStreamsHolder):
     def get_cli_hook(self, func_name):
         return func_name
 
-    def resolve_local_function_call(self, func_name, *args, **kwarg):
+    async def resolve_local_function_call(self, func_name, *args, **kwarg):
         if func_name == 'list':
             l = []
             if args:
@@ -455,9 +463,21 @@ class CliInterface(StdStreamsHolder):
                 return r
             return None
 
+        if func_name == 'input':
+            prompt = ""
+            show_char = True
+            if len(args):
+                prompt = str(args[0])
+                if len(args) > 1:
+                    show_char = args[1]
+            try:
+                return await self.get_input(prompt, show_char)
+            except:
+                return ""
+
         return None
 
-    def execute_binding_call(self, func_name: str, local_function: bool, *args, **kwarg):
+    async def execute_binding_call(self, func_name: str, local_function: bool, *args, **kwarg):
         try:
             ext_args = args
 
@@ -466,15 +486,19 @@ class CliInterface(StdStreamsHolder):
                     raise AttributeError("CLI interface missing function: {}".format(func_name))
 
                 fn = getattr(self, self.get_cli_hook(func_name))
-                res = fn(*ext_args)
+
+                if asyncio.iscoroutinefunction(fn):
+                    res = await fn(*ext_args)
+                else:
+                    res = fn(*ext_args)
             else:
-                res = self.resolve_local_function_call(func_name, *ext_args, **kwarg)
+                res = await self.resolve_local_function_call(func_name, *ext_args, **kwarg)
 
             return res
         except Exception as e:
             self.error("Exception executing binding call:", type(e), e)
 
-    def execute_success_sequence(self, matched_sequence, match_values, arglist):
+    async def execute_success_sequence(self, matched_sequence, match_values, arglist):
 
         exec_context = ExecContext(self, self.current_grammar, arglist)
 
@@ -488,18 +512,18 @@ class CliInterface(StdStreamsHolder):
             h_copy = hierarchy.copy()
             while h_copy:
                 parent = h_copy.pop()
-                exec_context.enter(parent, token_value)
+                await exec_context.enter(parent, token_value)
 
             element = hierarchy.pop(0) if hierarchy else None
 
-            exec_context.exit(element)
+            await exec_context.exit(element)
 
             parent = hierarchy.pop(0) if hierarchy else None
             while(element and parent):
                 if type(parent.element) in [AlternativeInputElement]:
-                    exec_context.exit(parent)
+                    await exec_context.exit(parent)
                 elif len(parent.element) == (element.element.position + 1):
-                    exec_context.exit(parent)
+                    await exec_context.exit(parent)
                 else:
                     rest_optional = True
                     position = element.element.position + 1
@@ -518,7 +542,7 @@ class CliInterface(StdStreamsHolder):
                                 break
                         position += 1
                     if rest_optional:
-                        exec_context.exit(parent)
+                        await exec_context.exit(parent)
                     else:
                         break
                 element = parent
@@ -526,7 +550,7 @@ class CliInterface(StdStreamsHolder):
 
         return exec_context.root_arglist
 
-    def match(self, tok_list, dry_run=False, last_token_complete=False, arglist=None):
+    async def match(self, tok_list, dry_run=False, last_token_complete=False, arglist=None):
 
         if not arglist:
             args = []
@@ -695,7 +719,7 @@ class CliInterface(StdStreamsHolder):
                                     match_values.append(match_value)
                                     tok_index += 1
                                 res.matched_values = match_values
-                                root_arglist = self.execute_success_sequence(matching_sequences[0], match_values, args)
+                                root_arglist = await self.execute_success_sequence(matching_sequences[0], match_values, args)
                                 arglen = len(arglist)
                                 for i in range(arglen):
                                     arglist[i] = root_arglist.pop(0)
