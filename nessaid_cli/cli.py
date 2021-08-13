@@ -385,6 +385,7 @@ class NessaidCli(CliInterface):
                     traceback.print_tb(e.__traceback__, file=self.stderr)
                     self.error("\n")
         finally:
+            self._exit_loop = False
             self.exit_grammar()
 
     def process_cli_response(self, tokens, cli_response):
