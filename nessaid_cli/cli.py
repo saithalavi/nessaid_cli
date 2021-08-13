@@ -6,83 +6,39 @@
 #
 
 import os
-import sys
 import asyncio
-import readline
 import traceback
-import platform
-import rlcompleter
 
 from nessaid_cli.elements import EndOfInpuToken
-from nessaid_cli.interface import CliInterface, ParsingResult
+from nessaid_cli.interface import CliInterface, TokenCompletion
+from nessaid_cli.tokens import MATCH_SUCCESS, MATCH_PARTIAL, MATCH_AMBIGUOUS
 from nessaid_cli.tokenizer.tokenizer import NessaidCliTokenizer, TokenizerException
-from nessaid_cli.tokens import CliToken, MATCH_SUCCESS, MATCH_PARTIAL, MATCH_AMBIGUOUS
-
-
-try:
-    import curses
-    CURSES_KEY_BACKSPACE = curses.KEY_BACKSPACE
-except:
-    CURSES_KEY_BACKSPACE = 263
-
-try:
-    import getch
-    def getinput(prompt, show_char=False):
-        """Replacement for getpass.getpass() which prints asterisks for each character typed"""
-        print(prompt, end='', flush=True)
-
-        buf = ''
-        kbd_int = False
-        while True:
-            try:
-                try:
-                    ch = getch.getch()
-                except KeyboardInterrupt:
-                    buf = ""
-                    kbd_int = True
-                    break
-                except OverflowError as e:
-                    continue
-            except KeyboardInterrupt:
-                buf = ""
-                kbd_int = True
-                break
-            except OverflowError as e:
-                continue
-
-            if ch == '\n':
-                print('')
-                break
-            elif ch in (CURSES_KEY_BACKSPACE, '\b', '\x7f'):
-                if len(buf) > 0:
-                    buf = buf[:-1]
-                    print('\b', end='', flush=True)
-                    print(" ", end='', flush=True)
-                    print('\b', end='', flush=True)
-            else:
-                buf += ch
-                c = '*' if show_char is False else ch
-                print(c, end='', flush=True)
-        if kbd_int:
-            print("\n", end='', flush=True)
-        return buf
-
-except ImportError:
-    import getpass as gp
-
-    def getinput(prompt, show_char=True):
-        if show_char:
-            return input(prompt)
-
-        return gp.getpass(prompt)
+from nessaid_readline.readline import NessaidReadline, NessaidReadlineEOF, NessaidReadlineKeyboadInterrupt
 
 
 class NessaidCli(CliInterface):
 
     def __init__(self, grammarset, loop=None, prompt=None,
-                 stdin=None, stdout=None, stderr=None, completekey='tab', use_rawinput=True):
+                 stdin=None, stdout=None, stderr=None,
+                 completekey='tab', use_rawinput=True, use_readline=False,
+                 history_size=100):
 
         super().__init__(loop, grammarset, stdin=stdin, stdout=stdout, stderr=stderr)
+
+        self._cli_readline = NessaidReadline()
+        self._history_size = history_size
+
+        if use_readline is True:
+            import readline
+            self._readline = readline
+            self._read_input = input
+            self._complete_tokens_processor = self.process_completion_tokens_for_readline
+        else:
+            self._readline = self.get_readline()
+            self._read_input = self._readline.readline
+            self._complete_tokens_processor =  self.process_completion_tokens
+            self._readline.set_prepare_history_entry(lambda entry: entry.strip())
+            self._readline.set_history_size(self._history_size)
 
         self._match_loop = asyncio.new_event_loop()
 
@@ -102,6 +58,12 @@ class NessaidCli(CliInterface):
         self._loop = loop if loop else asyncio.get_event_loop()
         self._nessaid_tokenizer = NessaidCliTokenizer()
 
+    def __del__(self):
+        try:
+            self._match_loop.close()
+        except:
+            pass
+
     @property
     def loop(self):
         return self._loop
@@ -109,6 +71,9 @@ class NessaidCli(CliInterface):
     @property
     def prompt(self):
         return self._prompt
+
+    def get_readline(self):
+        return self._cli_readline
 
     def tokenize(self, line):
         try:
@@ -128,7 +93,7 @@ class NessaidCli(CliInterface):
             line = self._cmdqueue.pop(0)
         elif self._use_rawinput:
             try:
-                line = await self.loop.run_in_executor(None, input, prompt)
+                line = await self.loop.run_in_executor(None, self._read_input, prompt)
             except EOFError:
                 line = ""
         else:
@@ -150,10 +115,10 @@ class NessaidCli(CliInterface):
 
         return line
 
-    def complete(self, text, state):
+    def complete(self, text, state): #noqa
 
         if self._waiting_input:
-            readline.insert_text("\t")
+            self._readline.insert_text("\t")
             return None
 
         TOKEN_SEPARATORS = [" "]
@@ -168,12 +133,12 @@ class NessaidCli(CliInterface):
             except IndexError:
                 return None
 
-        line = readline.get_line_buffer()
+        line = self._readline.get_line_buffer()
 
         try:
             success, error, tokens = self.tokenize(line)
             if not success:
-                self.set_completion_tokens(["Failure tokenizing input line: {}".format(line)])
+                self.set_completion_tokens(["Failure tokenizing input line: {} error: {}".format(line, error)])
                 return self._completion_matches[state]
         except Exception as e:
             self.set_completion_tokens(["Exception tokenizing input line: {}: {}".format(type(e), e)])
@@ -222,36 +187,37 @@ class NessaidCli(CliInterface):
                             if line == self._current_line:
                                 idx = line.rindex(tok_input)
                                 replace_len = len(line) - idx
-                                readline.insert_text(tok_replacement[replace_len:])
+                                self._readline.insert_text(tok_replacement[replace_len:])
                                 self._suggestion_shown = False
                                 return None
                             elif self._suggestion_shown and self._current_line and len(line) > len(self._current_line):
                                 if cli_startswith(line, self._current_line):
                                     idx = line.rindex(tok_input)
                                     replace_len = len(line) - idx
-                                    readline.insert_text(tok_replacement[replace_len:])
+                                    self._readline.insert_text(tok_replacement[replace_len:])
                                     if len(completions) == 1 and completions[0] == tok_replacement:
-                                        readline.insert_text(DEFAULT_SEPARATOR)
+                                        self._readline.insert_text(DEFAULT_SEPARATOR)
                                     self._suggestion_shown = False
                                     return None
                         elif match_output.next_constant_token and match_output.next_constant_token == tok_input:
                             if line and line[-1] not in TOKEN_SEPARATORS:
-                                readline.insert_text(DEFAULT_SEPARATOR)
+                                self._readline.insert_text(DEFAULT_SEPARATOR)
                                 self._suggestion_shown = False
                                 return None
                 elif match_output.next_constant_token:
                     if line and line[-1] in TOKEN_SEPARATORS:
                         if line == self._current_line:
-                            readline.insert_text(match_output.next_constant_token)
+                            self._readline.insert_text(match_output.next_constant_token)
                             self._suggestion_shown = False
                             return None
                     elif not line and self._empty_line_matching:
                         self._empty_line_matching = False
-                        readline.insert_text(match_output.next_constant_token)
+                        self._readline.insert_text(match_output.next_constant_token)
                         self._suggestion_shown = False
                         return None
             else:
                 self.set_completion_tokens(["Failed to parse: {}".format(match_output.error)])
+                self._cli_readline.play_bell()
                 return self._completion_matches[state]
 
             self.set_completion_tokens(completions)
@@ -272,44 +238,50 @@ class NessaidCli(CliInterface):
 
         return None
 
-    def process_completions(self, status, completions):
-        pass
-
-    def set_completion_tokens(self, tokens):
-        """
-        comp_tokens = []
-        char_repl_maps = {
-            "\\": "\\\\",
-            "\n": "\\n",
-            "\t": "\\t",
-            '"': '\\"'
-        }
-        for tok in tokens:
-            if tok.startswith('"'):
-                comp_token = tok[1:]
-                if tok.endswith('"'):
-                    comp_token = comp_token[:-1]
-                    e = '"'
-                else:
-                    e = ""
-                for r, repl in char_repl_maps.items():
-                    comp_token = comp_token.replace(r, repl)
-                comp_tokens.append('"' + comp_token + e)
-            else:
-                comp_tokens.append(tok)
-                """
+    def process_completion_tokens_for_readline(self, tokens):
         comp_tokens = tokens
         if len(comp_tokens) > 1:
             if os.name == 'nt':
                 comp_tokens = sorted(comp_tokens)
                 comp_tokens = [comp_tokens[0]] + ['\n' + t for t in comp_tokens[1:]]
-        self._completion_matches = comp_tokens + [" "]
+        return comp_tokens
+
+    def process_completion_tokens(self, tokens):
+        comps = []
+        helps = []
+        completions = []
+
+        for t in tokens:
+            if isinstance(t, TokenCompletion):
+                if not t.completion:
+                    comps.append("")
+                else:
+                    comps.append(t.completion)
+                helps.append(t.helpstring)
+            else:
+                comps.append(str(t))
+                helps.append("")
+
+        max_len = min(max([len(c) for c in comps]), 40)
+        for i in range(len(comps)):
+            comp = comps[i]
+            if len(comp) <= max_len:
+                comp += " " * (max_len - len(comp))
+            if helps[i]:
+                comp += (" :    " + helps[i])
+            completions.append(comp)
+
+        completions = sorted(completions)
+        return completions
+
+    def set_completion_tokens(self, tokens):
+        self._completion_matches = self._complete_tokens_processor(tokens)
 
     def input(self, prompt="", show_char=True):
 
         try:
             self._waiting_input = True
-            return getinput(prompt, show_char)
+            return self._readline.input(prompt, mask_input=not show_char)
         except Exception:
             return ""
         finally:
@@ -319,7 +291,7 @@ class NessaidCli(CliInterface):
 
         try:
             self._waiting_input = True
-            return await self.loop.run_in_executor(None, getinput, prompt, show_char)
+            return await self.loop.run_in_executor(None, self._readline.input, prompt, mask_input=not show_char)
         except Exception:
             return ""
         finally:
@@ -361,12 +333,12 @@ class NessaidCli(CliInterface):
     async def cli_exec_init(self):
         if not self._exec_inited:
             if self._use_rawinput and self._completekey:
-                self._old_completer = readline.get_completer()
-                readline.set_completer(self.complete)
-                if readline.__doc__ and 'libedit' in readline.__doc__:
-                    readline.parse_and_bind("bind ^I rl_complete")
+                self._old_completer = self._readline.get_completer()
+                self._readline.set_completer(self.complete)
+                if self._readline.__doc__ and 'libedit' in self._readline.__doc__:
+                    self._readline.parse_and_bind("bind ^I rl_complete")
                 else:
-                  readline.parse_and_bind(self._completekey+": complete")
+                    self._readline.parse_and_bind(self._completekey+": complete")
             self._exec_inited = True
 
     async def cmdloop(self, grammarname, intro=None):
@@ -379,7 +351,13 @@ class NessaidCli(CliInterface):
                 self.stdout.flush()
 
             while not self._exit_loop:
-                line = await self.get_next_line(self.prompt)
+                try:
+                    line = await self.get_next_line(self.prompt)
+                except NessaidReadlineKeyboadInterrupt:
+                    continue
+                except NessaidReadlineEOF:
+                    self._exit_loop = True
+                    continue
                 self._current_line = line
                 #print("Input:", line)
                 try:
@@ -413,3 +391,11 @@ class NessaidCli(CliInterface):
         if tokens and cli_response.result != MATCH_SUCCESS:
             self.error("Result:", cli_response.result)
             self.error("Error:", cli_response.error)
+            self._cli_readline.play_bell()
+
+    def run(self, grammarname, intro=None):
+        loop = self.loop or asyncio.get_event_loop()
+        if loop.is_running:
+            loop.create_task(self.cmdloop(grammarname=grammarname, intro=intro))
+        else:
+            loop.run_until_complete(self.cmdloop(grammarname=grammarname, intro=intro))

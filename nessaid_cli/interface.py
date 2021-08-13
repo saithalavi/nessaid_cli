@@ -51,6 +51,16 @@ from nessaid_cli.lex_yacc_common import (
 )
 
 
+class TokenCompletion(str):
+
+    def __new__(cls, completion, helpstring):
+        return super(TokenCompletion, cls).__new__(cls, completion or helpstring)
+
+    def __init__(self, completion, helpstring):
+        self.completion = completion
+        self.helpstring = helpstring
+
+
 class ParsingResult():
 
     def __init__(self):
@@ -124,14 +134,14 @@ class ParsingResult():
                 if t.completable:
                     _, completions = t.complete(cur_input if cur_input else "")
                     if not completions:
-                        next_tokens.add(t.helpstring)
+                        next_tokens.add(TokenCompletion(None, t.helpstring))
                     else:
                         if t.case_insensitive:
                             self.case_insensitive = True
                         for c in completions:
-                            next_tokens.add(str(c))
+                            next_tokens.add(TokenCompletion(str(c), t.helpstring))
                 else:
-                    next_tokens.add(t.helpstring)
+                    next_tokens.add(TokenCompletion(None, t.helpstring))
             else:
                 add_EOI = True
 

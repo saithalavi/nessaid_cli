@@ -63,14 +63,12 @@ NessaidCmd is the stripped down version as an alternative for the default Cmd im
 install_requires = [
     "asyncio",
     "ply",
+    "nessaid_readline",
 ]
-
-if os.name == 'nt':
-    install_requires.append("pyreadline")
 
 setup(
     name=pkg_name,
-    version='2.1.0',
+    version='2.2.0',
     url='https://github.com/saithalavi/nessaid_cli',
     description="Nessaid's CLI tools",
     long_description=long_description,

@@ -5,6 +5,7 @@
 # file included as part of this package.
 #
 
+import asyncio
 import inspect
 import textwrap
 
@@ -132,6 +133,13 @@ class NessaidCmd(NessaidCli):
         """
 
         return await super().cmdloop(grammarname=self.generate_root_grammar_name(), intro=intro)
+
+    def run(self, intro=None):
+        loop = self.loop or asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(self.cmdloop(intro=intro))
+        else:
+            loop.run_until_complete(self.cmdloop(intro=intro))
 
     @classmethod
     async def execute_args(cls, *args):
