@@ -5,7 +5,6 @@
 # file included as part of this package.
 #
 
-import sys
 from nessaid_cli.cmd import NessaidCmd
 
 class TestCmd(NessaidCmd):
@@ -51,11 +50,4 @@ class TestCmd(NessaidCmd):
 if __name__ == '__main__':
     cmd = TestCmd(prompt="nessaid-cmd # ", show_grammar=True)
     #show_grammar will print the generated grammar specification
-    try:
-        cmd.loop.run_until_complete(cmd.cmdloop(intro="Starting Nessaid CMD Demo"))
-    except KeyboardInterrupt:
-        sys.exit(0)
-    except Exception as e:
-        cmd.error("Exception in cmdloop:", e)
-        sys.exit(1)
-    sys.exit(0)
+    cmd.run(intro="Starting Nessaid CMD Demo")

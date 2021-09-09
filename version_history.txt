@@ -1,3 +1,29 @@
+Version 3.0.0:
+
+    Implemented Orderless set grammar.
+        The expression ("a", "b", "c") now will match all three in any order
+        The expression ("a", {"b"}, "c") now will match all three in any order, b being optional
+        Similarly {"a", "b", "c"} now will match all three in any order altogether being optional
+
+    Support for Profiling and timing
+        The orderless set grammar as of now has bad execution complexity, as the number of terms grows.
+        The new commands will help in timing and basic profiling of CLI execution
+        The commands are (cmd-timing | cmd-profiling) (on | off)
+
+    Support for sub CLI contexts
+        A new CLI context can be spawned from a running CLI. The new CLI will match it's own rules and
+        there's a provision to switch back to parent CLI if the input can't be matched in it, but can be matched in
+        the parent rules.
+
+    Token classes should return NullTokenValue instead of None if a value cannot be obtained from input
+
+    New parse tree based evaluation.
+
+    Miscellaneous fixes and removal of warnings
+
+    Further documentation. A new simple cli implementation and a more complex trivial router CLI are composed
+        with inline comments for documentation. Available in doc directory.
+
 Version 2.2.0:
 
     Removed readline dependency. Now runs on own basic readline package. pypi:nessaid-readline

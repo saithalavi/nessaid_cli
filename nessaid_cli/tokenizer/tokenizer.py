@@ -5,8 +5,6 @@
 # file included as part of this package.
 #
 
-import traceback
-
 import ply.lex as lex
 import ply.yacc as yacc
 
@@ -110,7 +108,7 @@ class NessaidCliTokenizer(StdStreamsHolder):
             error_msg = "Syntax error while tokenizing." + " Token: {}".format(e.token) if e.token else ""
             raise TokenizerException(error_msg, token=e.token)
         except Exception as e:
-            error_msg = "Exception while tokenizing: {}".format(str(e)) + " Token: {}".format(e.token) if e.token else ""
+            error_msg = "Exception while tokenizing: {}".format(str(e))
             return e
 
     def p_line_content(self, t):

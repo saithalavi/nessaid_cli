@@ -1,0 +1,429 @@
+Orderless set benchmark grammar
+
+    async def do_orderless(self):
+        r"""
+        (
+        "orderless"
+        (("1", {"2"}, "3"), ("a", {"b"}, "c")) * 2
+        {("1", {"2"}, "3"), ("a", {"b"}, "c")} * 4
+        ) * (1: 50)
+        """
+        print("OK")
+
+
+Orderless set benchmark input:
+
+o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a
+
+
+Performance: v3.0.0
+
+# VSCode Debugger
+#
+#
+# sy
+
+system-info :    system-info
+
+# sy
+======================================== Boot Time ========================================
+Boot Time: 2021/8/29 15:4:50
+======================================== CPU Info =========================================
+Physical cores: 4
+Total cores: 8
+Max Frequency: 3601.00Mhz
+Min Frequency: 0.00Mhz
+Current Frequency: 1764.00Mhz
+CPU Usage Per Core:
+Core 0: 18.8%
+Core 1: 0.0%
+Core 2: 18.7%
+Core 3: 0.0%
+Core 4: 12.5%
+Core 5: 0.0%
+Core 6: 31.3%
+Core 7: 0.0%
+Total CPU Usage: 10.2%
+======================================== Memory Information ===============================
+Total: 15.69GB
+Available: 3.31GB
+Used: 12.38GB
+Percentage: 78.9%
+#
+# cmd-t on
+# cmd-p on
+start: 1631190218.0968876
+end: 1631190218.128891
+Time taken: 0.03200340270996094
+#
+# o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b
+c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3
+o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a
+OK
+         1763623 function calls (1760574 primitive calls) in 8.050 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    3.763    3.763    8.050    8.050 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:678(match)
+   219960    1.683    0.000    1.799    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:637(get_token_value)
+      468    0.422    0.001    1.288    0.003 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:607(next)
+        1    0.162    0.162    0.524    0.524 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:570(execute_success_sequence)
+   220902    0.436    0.000    0.451    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:432(get_token)
+    12455    0.305    0.000    0.345    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:592(copy_lookup_path_from)
+ 2291/649    0.066    0.000    0.194    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:777(first)
+    14717    0.164    0.000    0.189    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:587(add_lookup_path)
+     5177    0.033    0.000    0.155    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:758(get)
+   220902    0.136    0.000    0.136    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:575(name)
+   219967    0.115    0.000    0.115    0.000 d:\github-repos\nessaid_cli\nessaid_cli\tokens.py:96(cacheable)
+     5626    0.103    0.000    0.115    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:261(enter)
+      941    0.076    0.000    0.094    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:302(exit)
+  504/120    0.012    0.000    0.074    0.001 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:234(copy)
+  396/132    0.012    0.000    0.072    0.001 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:288(copy)
+  504/120    0.004    0.000    0.069    0.001 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:235(<listcomp>)
+  396/132    0.006    0.000    0.065    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:289(<listcomp>)
+     2662    0.025    0.000    0.061    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:660(match_token)
+     4370    0.047    0.000    0.053    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:696(child_count)
+    96964    0.053    0.000    0.053    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:740(path)
+      818    0.041    0.000    0.046    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:621(<listcomp>)
+     1584    0.040    0.000    0.044    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:601(path_present)
+     1440    0.026    0.000    0.032    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:682(__init__)
+    56169    0.031    0.000    0.031    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:728(parent)
+      840    0.013    0.000    0.031    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:182(copy)
+     2749    0.005    0.000    0.030    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\asyncio\coroutines.py:164(iscoroutinefunction)
+   252945    0.029    0.000    0.029    0.000 {method 'append' of 'list' objects}
+      250    0.025    0.000    0.028    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:703(parents)
+     2749    0.004    0.000    0.025    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\inspect.py:189(iscoroutinefunction)
+     2749    0.016    0.000    0.021    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\inspect.py:171(_has_code_flag)
+     1740    0.018    0.000    0.021    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:104(copy_extras)
+     2926    0.016    0.000    0.021    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:744(mandatory)
+      504    0.009    0.000    0.019    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:616(<listcomp>)
+   257573    0.017    0.000    0.017    0.000 {built-in method builtins.isinstance}
+     1338    0.015    0.000    0.017    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:562(__init__)
+    25408    0.014    0.000    0.014    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:583(lookup_path)
+    16889    0.011    0.000    0.011    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:736(position)
+      900    0.006    0.000    0.008    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:223(__init__)
+     2662    0.007    0.000    0.007    0.000 d:\github-repos\nessaid_cli\nessaid_cli\tokens.py:129(match)
+      840    0.005    0.000    0.007    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:178(__init__)
+    12647    0.007    0.000    0.007    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:732(element)
+     2381    0.007    0.000    0.007    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:690(reset)
+      360    0.003    0.000    0.006    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:629(<listcomp>)
+      396    0.003    0.000    0.006    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:274(__init__)
+      940    0.005    0.000    0.006    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:755(add_numbered_variable)
+    12849    0.005    0.000    0.005    0.000 {method 'copy' of 'list' objects}
+     8444    0.005    0.000    0.005    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:115(repeat_count)
+     7110    0.004    0.000    0.004    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:126(value)
+     7508    0.004    0.000    0.004    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:716(input_sequence)
+     1740    0.004    0.000    0.004    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:96(__init__)
+     5498    0.002    0.000    0.003    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\inspect.py:80(ismethod)
+  396/288    0.002    0.000    0.002    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:296(mandatory)
+     1836    0.002    0.000    0.002    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:844(__eq__)
+     1740    0.002    0.000    0.002    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:119(repeat_count)
+     1740    0.002    0.000    0.002    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:137(parent)
+      181    0.002    0.000    0.002    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:253(__len__)
+       79    0.001    0.000    0.002    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:669(complete_token)
+      288    0.002    0.000    0.002    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:748(repeat_count)
+      219    0.001    0.000    0.002    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:260(mandatory)
+     2749    0.001    0.000    0.001    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\functools.py:428(_unwrap_partial)
+      947    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:85(assign)
+     2749    0.001    0.000    0.001    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\inspect.py:158(isfunction)
+     1191    0.001    0.000    0.001    0.000 {built-in method builtins.any}
+      941    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:121(__init__)
+     1440    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:712(tree)
+        1    0.000    0.000    0.001    0.001 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:708(set_next_tokens)
+     1445    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:167(mandatory)
+     4229    0.001    0.000    0.001    0.000 {method 'pop' of 'list' objects}
+     7248    0.001    0.000    0.001    0.000 {built-in method builtins.len}
+     1227    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:190(mandatory)
+        7    0.000    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\tokens.py:100(get_value)
+      468    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:920(append_matching_sequence)
+      941    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:151(pre_match_binding)
+      942    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:159(post_match_binding)
+        1    0.000    0.000    0.001    0.001 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:122(set_next_tokens)
+      576    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:282(__len__)
+     1877    0.001    0.000    0.001    0.000 {method 'startswith' of 'str' objects}
+      940    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:125(var_id)
+      847    0.001    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:171(helpstring)
+        7    0.000    0.000    0.001    0.000 d:\github-repos\nessaid_cli\nessaid_cli\utils.py:40(convert_to_python_string)
+      718    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:571(node)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:423(create_cli_token)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\tokens.py:81(__init__)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\utils.py:77(convert_to_cli_string)
+      468    0.000    0.000    0.000    0.000 {method 'union' of 'set' objects}
+       86    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\tokens.py:137(complete)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:231(execute_binding)
+     1348    0.000    0.000    0.000    0.000 {method 'add' of 'set' objects}
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:549(execute_binding_call)
+      180    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:231(__len__)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:170(__init__)
+       70    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\utils.py:55(<genexpr>)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\benchmark.py:6(do_orderless)
+      504    0.000    0.000    0.000    0.000 {built-in method builtins.all}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.print}
+       60    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\utils.py:78(<genexpr>)
+       14    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\tokens.py:112(get_helpstring)
+       86    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\tokens.py:125(completable)
+        7    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:579(helpstring)
+      468    0.000    0.000    0.000    0.000 {method 'reverse' of 'list' objects}
+        2    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:385(map_grammar_arguments)
+        9    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:752(add_named_variable)
+      6/3    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:203(resolve_argument)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:177(<listcomp>)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:554(get_tokendef)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:286(<listcomp>)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:188(root_arglist)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:190(<listcomp>)
+        7    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:53(__new__)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:403(clear_caches)
+       14    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\tokens.py:119(helpstring)
+       21    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:110(var_id)
+        7    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:392(cache_string)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:34(__init__)
+        7    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:56(__init__)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:28(name)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:443(name)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:100(__init__)
+        7    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:388(str_cache)
+        7    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:447(value)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:364(value)
+        1    0.000    0.000    0.000    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\cProfile.py:133(__exit__)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:63(__init__)
+        7    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\tokens.py:92(case_insensitive)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:520(token_defs)
+        3    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:91(value)
+        6    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:41(value)
+        4    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:360(param_list)
+        8    0.000    0.000    0.000    0.000 {built-in method builtins.hasattr}
+        7    0.000    0.000    0.000    0.000 {built-in method __new__ of type object at 0x000007FEBE1F6810}
+        3    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:112(__len__)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:254(<listcomp>)
+        2    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:887(__hash__)
+        2    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:376(name)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:395(clear_str_cache)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:399(clear_token_value_cache)
+        2    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:867(__bool__)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:384(current_grammar)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:19(blocks)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:51(name)
+        2    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\interface.py:466(get_cli_hook)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:451(arg_list)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\elements.py:720(named_variables)
+        1    0.000    0.000    0.000    0.000 d:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:55(arglist)
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        1    0.000    0.000    0.000    0.000 {method 'values' of 'dict' objects}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.getattr}
+
+
+Token Hit: 220896
+Token Miss: 6
+Token Value Hit: 219953
+Token Value Miss: 7
+start: 1631190221.381216
+end: 1631190229.4720252
+Time taken: 8.090809106826782
+#
+
+
+#
+# Without debugger
+#
+#
+# sy
+======================================== Boot Time ========================================
+Boot Time: 2021/8/29 15:4:51
+======================================== CPU Info =========================================
+Physical cores: 4
+Total cores: 8
+Max Frequency: 3601.00Mhz
+Min Frequency: 0.00Mhz
+Current Frequency: 1584.00Mhz
+CPU Usage Per Core:
+Core 0: 7.7%
+Core 1: 0.0%
+Core 2: 3.1%
+Core 3: 0.0%
+Core 4: 12.3%
+Core 5: 0.0%
+Core 6: 9.2%
+Core 7: 0.0%
+Total CPU Usage: 4.1%
+======================================== Memory Information ===============================
+Total: 15.69GB
+Available: 3.33GB
+Used: 12.36GB
+Percentage: 78.8%
+# cmd-t on
+# cmd-p on
+start: 1631190357.8418605
+end: 1631190357.843861
+Time taken: 0.002000570297241211
+#
+# o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o
+1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2
+3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a
+b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c
+a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b
+c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a o 1 2 3 a b c a b c 1 2 3 o c b a 3 2 1 3 2 1 c b a
+OK
+         1763623 function calls (1760574 primitive calls) in 0.657 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.212    0.212    0.657    0.657 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:678(match)
+   219960    0.114    0.000    0.130    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:637(get_token_value)
+   220902    0.106    0.000    0.119    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:432(get_token)
+      468    0.019    0.000    0.101    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:607(next)
+        1    0.010    0.010    0.039    0.039 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:570(execute_success_sequence)
+    12455    0.016    0.000    0.026    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:592(copy_lookup_path_from)
+   220902    0.026    0.000    0.026    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:575(name)
+   252945    0.025    0.000    0.025    0.000 {method 'append' of 'list' objects}
+    14717    0.011    0.000    0.021    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:587(add_lookup_path)
+ 2291/649    0.007    0.000    0.020    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:777(first)
+   219967    0.016    0.000    0.016    0.000 D:\github-repos\nessaid_cli\nessaid_cli\tokens.py:96(cacheable)
+     5177    0.003    0.000    0.016    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:758(get)
+   257573    0.015    0.000    0.015    0.000 {built-in method builtins.isinstance}
+     2662    0.003    0.000    0.012    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:660(match_token)
+     2749    0.001    0.000    0.008    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\asyncio\coroutines.py:164(iscoroutinefunction)
+     5626    0.006    0.000    0.008    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:261(enter)
+      941    0.005    0.000    0.008    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:302(exit)
+    96964    0.008    0.000    0.008    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:740(path)
+  504/120    0.001    0.000    0.007    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:234(copy)
+     2749    0.001    0.000    0.007    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\inspect.py:189(iscoroutinefunction)
+  396/132    0.001    0.000    0.007    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:288(copy)
+  504/120    0.000    0.000    0.007    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:235(<listcomp>)
+  396/132    0.000    0.000    0.006    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:289(<listcomp>)
+     2749    0.003    0.000    0.006    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\inspect.py:171(_has_code_flag)
+     4370    0.004    0.000    0.005    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:696(child_count)
+    12849    0.005    0.000    0.005    0.000 {method 'copy' of 'list' objects}
+    56169    0.005    0.000    0.005    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:728(parent)
+     1440    0.002    0.000    0.004    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:682(__init__)
+      840    0.001    0.000    0.003    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:182(copy)
+     1584    0.002    0.000    0.003    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:601(path_present)
+      818    0.002    0.000    0.002    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:621(<listcomp>)
+    25408    0.002    0.000    0.002    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:583(lookup_path)
+     2381    0.002    0.000    0.002    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:690(reset)
+    16889    0.002    0.000    0.002    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:736(position)
+      250    0.001    0.000    0.002    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:703(parents)
+     1740    0.001    0.000    0.002    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:104(copy_extras)
+     1338    0.001    0.000    0.002    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:562(__init__)
+     2926    0.001    0.000    0.002    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:744(mandatory)
+     5498    0.001    0.000    0.002    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\inspect.py:80(ismethod)
+    12647    0.001    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:732(element)
+     2662    0.001    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\tokens.py:129(match)
+      900    0.001    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:223(__init__)
+      504    0.000    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:616(<listcomp>)
+      396    0.000    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:274(__init__)
+     8444    0.001    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:115(repeat_count)
+      840    0.001    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:178(__init__)
+     7110    0.001    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:126(value)
+     1740    0.001    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:96(__init__)
+     2749    0.001    0.000    0.001    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\functools.py:428(_unwrap_partial)
+     2749    0.001    0.000    0.001    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\inspect.py:158(isfunction)
+     7508    0.001    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:716(input_sequence)
+     1836    0.000    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:844(__eq__)
+     1740    0.000    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:119(repeat_count)
+     1740    0.000    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:137(parent)
+     7248    0.001    0.000    0.001    0.000 {built-in method builtins.len}
+      940    0.000    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:755(add_numbered_variable)
+     4229    0.001    0.000    0.001    0.000 {method 'pop' of 'list' objects}
+      360    0.000    0.000    0.001    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:629(<listcomp>)
+     1877    0.000    0.000    0.000    0.000 {method 'startswith' of 'str' objects}
+       79    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:669(complete_token)
+      947    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:85(assign)
+  396/288    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:296(mandatory)
+     1191    0.000    0.000    0.000    0.000 {built-in method builtins.any}
+      468    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:920(append_matching_sequence)
+      576    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:282(__len__)
+      941    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:151(pre_match_binding)
+      941    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:121(__init__)
+      219    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:260(mandatory)
+      468    0.000    0.000    0.000    0.000 {method 'union' of 'set' objects}
+     1440    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:712(tree)
+      181    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:253(__len__)
+     1348    0.000    0.000    0.000    0.000 {method 'add' of 'set' objects}
+      288    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:748(repeat_count)
+     1445    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:167(mandatory)
+        7    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\tokens.py:100(get_value)
+     1227    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:190(mandatory)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:231(execute_binding)
+      942    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:159(post_match_binding)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:708(set_next_tokens)
+      940    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:125(var_id)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:549(execute_binding_call)
+      847    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:171(helpstring)
+      718    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:571(node)
+        7    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\utils.py:40(convert_to_python_string)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\benchmark.py:6(do_orderless)
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.print}
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:122(set_next_tokens)
+      180    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:231(__len__)
+      504    0.000    0.000    0.000    0.000 {built-in method builtins.all}
+       86    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\tokens.py:137(complete)
+      468    0.000    0.000    0.000    0.000 {method 'reverse' of 'list' objects}
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:423(create_cli_token)
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\tokens.py:81(__init__)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:170(__init__)
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\utils.py:77(convert_to_cli_string)
+        2    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:385(map_grammar_arguments)
+        7    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:53(__new__)
+       60    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\utils.py:78(<genexpr>)
+       86    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\tokens.py:125(completable)
+       70    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\utils.py:55(<genexpr>)
+       14    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\tokens.py:112(get_helpstring)
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:554(get_tokendef)
+      6/3    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:203(resolve_argument)
+        7    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:392(cache_string)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:177(<listcomp>)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:188(root_arglist)
+        7    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:579(helpstring)
+        9    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:752(add_named_variable)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:286(<listcomp>)
+        1    0.000    0.000    0.000    0.000 C:\Users\Said\AppData\Local\Programs\Python\Python38\lib\cProfile.py:133(__exit__)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:403(clear_caches)
+        7    0.000    0.000    0.000    0.000 {built-in method __new__ of type object at 0x000007FEBE1F6810}
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:63(__init__)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:190(<listcomp>)
+       14    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\tokens.py:119(helpstring)
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:28(name)
+       21    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:110(var_id)
+        8    0.000    0.000    0.000    0.000 {built-in method builtins.hasattr}
+        7    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:56(__init__)
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:364(value)
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:34(__init__)
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:520(token_defs)
+        7    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:447(value)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:395(clear_str_cache)
+        7    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:388(str_cache)
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:100(__init__)
+        7    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\tokens.py:92(case_insensitive)
+        4    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:360(param_list)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:384(current_grammar)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:19(blocks)
+        3    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:91(value)
+        3    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:112(__len__)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:443(name)
+        2    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:887(__hash__)
+        6    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:41(value)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:399(clear_token_value_cache)
+        1    0.000    0.000    0.000    0.000 {method 'values' of 'dict' objects}
+        2    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:376(name)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:451(arg_list)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:51(name)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\binding_parser\binding_objects.py:55(arglist)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:254(<listcomp>)
+        1    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:720(named_variables)
+        2    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\elements.py:867(__bool__)
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        2    0.000    0.000    0.000    0.000 D:\github-repos\nessaid_cli\nessaid_cli\interface.py:466(get_cli_hook)
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.getattr}
+
+
+Token Hit: 220896
+Token Miss: 6
+Token Value Hit: 219953
+Token Value Miss: 7
+start: 1631190381.3072069
+end: 1631190382.2383
+Time taken: 0.9310932159423828
+#

@@ -5,7 +5,6 @@
 # file included as part of this package.
 #
 
-import sys
 from nessaid_cli.cmd import NessaidCmd
 
 from nessaid_cli.tokens import (
@@ -23,9 +22,6 @@ class TestCmd(NessaidCmd):
         """Method to override.
         It should return the list of token classes being used"""
         return [RangedIntToken, RangedStringToken]
-
-    def print(self, *args):
-        print("External function:", *args)
 
     def do_command1(self, number):
         r"""
@@ -75,7 +71,7 @@ class TestCmd(NessaidCmd):
             call print("Input number:", $2);
         >>
         """
-        print("Input str is:", string);
+        print("Input str is:", string)
 
     def do_command3(self, string, number, numbers):
         r"""
@@ -99,19 +95,12 @@ class TestCmd(NessaidCmd):
             ) * (1:3)
         }
         """
-        print("Input str is:", string);
-        print("Input number is:", number);
-        print("Input list is:", numbers);
+        print("Input str is:", string)
+        print("Input number is:", number)
+        print("Input list is:", numbers)
 
 
 if __name__ == '__main__':
     cmd = TestCmd(prompt="nessaid-cmd # ", show_grammar=True)
     #show_grammar will print the generated grammar specification
-    try:
-        cmd.loop.run_until_complete(cmd.cmdloop(intro="Starting Nessaid CMD Demo"))
-    except KeyboardInterrupt:
-        sys.exit(0)
-    except Exception as e:
-        cmd.error("Exception in cmdloop:", e)
-        sys.exit(1)
-    sys.exit(0)
+    cmd.run(intro="Starting Nessaid CMD Demo")

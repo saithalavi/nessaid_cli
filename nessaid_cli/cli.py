@@ -16,16 +16,30 @@ from nessaid_cli.tokenizer.tokenizer import NessaidCliTokenizer, TokenizerExcept
 from nessaid_readline.readline import NessaidReadline, NessaidReadlineEOF, NessaidReadlineKeyboadInterrupt
 
 
+class ChildCliExitException(Exception):
+
+    def __init__(self, tok_list, dry_run=False, last_token_complete=False, arglist=None):
+        self.token_list = tok_list
+        self.dry_run = dry_run
+        self.last_token_complete = last_token_complete
+        self.arglist = arglist
+
+
 class NessaidCli(CliInterface):
 
-    def __init__(self, grammarset, loop=None, prompt=None,
+    def __init__(self, grammarset, loop=None, parent=None, prompt=None,
                  stdin=None, stdout=None, stderr=None,
                  completekey='tab', use_rawinput=True, use_readline=False,
-                 history_size=100):
+                 history_size=100, enable_bell=False, str_cache_size=128):
 
-        super().__init__(loop, grammarset, stdin=stdin, stdout=stdout, stderr=stderr)
+        self.validate_token_classes()
+
+        super().__init__(loop, grammarset, stdin=stdin, stdout=stdout, stderr=stderr, str_cache_size=str_cache_size)
+
+        enable_bell = False if enable_bell is not True else True
 
         self._cli_readline = NessaidReadline()
+        self._cli_readline.enable_bell(enable_bell)
         self._history_size = history_size
 
         if use_readline is True:
@@ -42,6 +56,7 @@ class NessaidCli(CliInterface):
 
         self._match_loop = asyncio.new_event_loop()
 
+        self._parent = parent
         self._completekey = completekey
         self._use_rawinput = use_rawinput
         self._cmdqueue = []
@@ -58,6 +73,8 @@ class NessaidCli(CliInterface):
         self._loop = loop if loop else asyncio.get_event_loop()
         self._nessaid_tokenizer = NessaidCliTokenizer()
 
+        self._child_cli = None
+
     def __del__(self):
         try:
             self._match_loop.close()
@@ -69,10 +86,39 @@ class NessaidCli(CliInterface):
         return self._loop
 
     @property
+    def parent(self):
+        return self._parent
+
+    @property
     def prompt(self):
         return self._prompt
 
+    @property
+    def child_cli(self):
+        return self._child_cli
+
+    @child_cli.setter
+    def child_cli(self, cli):
+        self._child_cli = cli
+
+    def validate_token_classes(self):
+        token_classes = self.get_token_classes()
+        for cls in token_classes:
+            methods = [cls.complete, cls.match, cls.get_value]
+            if (all([asyncio.iscoroutinefunction(m) for m in methods]) or
+                all([not asyncio.iscoroutinefunction(m) for m in methods])):
+                pass
+            else:
+                msg = ("WARNING: A mix of async and non async functions are used for " +
+                       "the match, complete, get_value mthods of class {}.\nThis will most probably " +
+                       "end up in failures as these functions call one another\n").format(cls.__name__)
+                print(msg, file=self.stderr)
+
     def get_readline(self):
+        return self._cli_readline
+
+    @property
+    def cli_readline(self):
         return self._cli_readline
 
     def tokenize(self, line):
@@ -168,8 +214,8 @@ class NessaidCli(CliInterface):
                 return False
 
             has_full_match = False
-            if match_output.next_tokens and EndOfInpuToken() in match_output.next_tokens:
-                match_output.next_tokens.remove(EndOfInpuToken())
+            if match_output.next_tokens and EndOfInpuToken in match_output.next_tokens:
+                match_output.next_tokens.remove(EndOfInpuToken)
                 has_full_match = True
 
             if match_output.result == MATCH_SUCCESS:
@@ -250,6 +296,13 @@ class NessaidCli(CliInterface):
         comps = []
         helps = []
         completions = []
+        add_completion_token = False
+
+        if "NEWLINE: Complete command" in tokens:
+            tokens.remove("NEWLINE: Complete command")
+            add_completion_token = True
+            if not tokens:
+                return ["NEWLINE: Complete command"]
 
         for t in tokens:
             if isinstance(t, TokenCompletion):
@@ -263,6 +316,9 @@ class NessaidCli(CliInterface):
                 helps.append("")
 
         max_len = min(max([len(c) for c in comps]), 40)
+        if add_completion_token:
+            max_len = min(max(max_len, len('NEWLINE')), 40)
+
         for i in range(len(comps)):
             comp = comps[i]
             if len(comp) <= max_len:
@@ -272,6 +328,14 @@ class NessaidCli(CliInterface):
             completions.append(comp)
 
         completions = sorted(completions)
+
+        if add_completion_token:
+            comp = 'NEWLINE'
+            if len(comp) <= max_len:
+                comp += " " * (max_len - len(comp))
+                comp += (" :    " + "Complete command")
+                completions.append(comp)
+
         return completions
 
     def set_completion_tokens(self, tokens):
@@ -291,13 +355,16 @@ class NessaidCli(CliInterface):
 
         try:
             self._waiting_input = True
-            return await self.loop.run_in_executor(None, self._readline.input, prompt, mask_input=not show_char)
+            return await self.loop.run_in_executor(None, self._readline.input, prompt, not show_char)
         except Exception:
             return ""
         finally:
             self._waiting_input = False
 
     async def preloop(self):
+        pass
+
+    async def postintro(self):
         pass
 
     def exit_loop(self):
@@ -341,6 +408,9 @@ class NessaidCli(CliInterface):
                     self._readline.parse_and_bind(self._completekey+": complete")
             self._exec_inited = True
 
+    async def context_loop(self):
+        raise NotImplementedError
+
     async def cmdloop(self, grammarname, intro=None):
         self.enter_grammar(grammarname)
         try:
@@ -349,6 +419,21 @@ class NessaidCli(CliInterface):
             if intro is not None:
                 self.stdout.write(str(intro)+"\n")
                 self.stdout.flush()
+
+            self._child_cli = None
+
+            await self.postintro()
+
+            while self._child_cli:
+                child_cli = self._child_cli
+                self._child_cli = None
+                try:
+                    await child_cli.context_loop()
+                except ChildCliExitException as e:
+                    match_output = await self.match(
+                        e.token_list, dry_run=e.dry_run,
+                        last_token_complete=e.last_token_complete, arglist=e.arglist
+                    )
 
             while not self._exit_loop:
                 try:
@@ -376,17 +461,33 @@ class NessaidCli(CliInterface):
                 try:
                     arglist = []
                     input_tokens = [str(t) for t in tokens]
+                    self._child_cli = None
                     match_output = await self.match(input_tokens, dry_run=False, last_token_complete=True, arglist=arglist)
+
+                    while self._child_cli:
+                        child_cli = self._child_cli
+                        self._child_cli = None
+                        try:
+                            await child_cli.context_loop()
+                        except ChildCliExitException as e:
+                            match_output = await self.match(e.token_list, dry_run=False, last_token_complete=True, arglist=arglist)
+
                     self._current_line = None
                     self.process_cli_response(tokens, match_output)
+                except ChildCliExitException as e:
+                    raise e
                 except Exception as e:
                     self.error("Exception parsing input line:", type(e), e)
                     self.error("\n")
                     traceback.print_tb(e.__traceback__, file=self.stderr)
                     self.error("\n")
         finally:
+            await self.on_exit()
             self._exit_loop = False
             self.exit_grammar()
+
+    async def on_exit(self):
+        pass
 
     def process_cli_response(self, tokens, cli_response):
         if tokens and cli_response.result != MATCH_SUCCESS:
@@ -396,7 +497,7 @@ class NessaidCli(CliInterface):
 
     def run(self, grammarname, intro=None):
         loop = self.loop or asyncio.get_event_loop()
-        if loop.is_running:
+        if loop.is_running():
             loop.create_task(self.cmdloop(grammarname=grammarname, intro=intro))
         else:
             loop.run_until_complete(self.cmdloop(grammarname=grammarname, intro=intro))

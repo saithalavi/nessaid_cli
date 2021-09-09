@@ -21,7 +21,7 @@ This class accepts a list or sequence of strings as possible matches. It matches
 ```python
 class AlternativeStringsToken(CliToken):
 
-    def __init__(self, name, alternatives, *args):
+    def __init__(self, name, alternatives, *args, cli=None):
         super().__init__(name)
         if (isinstance(alternatives, list) or
             isinstance(alternatives, set) or
@@ -40,7 +40,7 @@ class AlternativeStringsToken(CliToken):
     def completable(self):
         return True
 
-    def complete(self, token_input):
+    def complete(self, token_input, cli=None):
         if not token_input:
             return len(self._alternatives), list(self._alternatives)
         completions = set()
@@ -49,10 +49,10 @@ class AlternativeStringsToken(CliToken):
                 completions.add(e)
         return len(completions), list(completions)
 
-    def match(self, token_input):
+    def match(self, token_input, cli=None):
         if token_input and token_input in  self._alternatives:
             return MATCH_SUCCESS
-        n, completions = self.complete(token_input)
+        n, completions = self.complete(token_input, cli=cli)
         if n == TOO_MANY_COMPLETIONS:
             return MATCH_PARTIAL
         if not completions:
@@ -68,7 +68,7 @@ This class will process decimal numbers within specified range. For obvious reas
 ```python
 class RangedDecimalToken(CliToken):
 
-    def __init__(self, name, start, end):
+    def __init__(self, name, start, end, cli=None):
         start = float(start)
         end = float(end)
         super().__init__(name)
@@ -83,10 +83,10 @@ class RangedDecimalToken(CliToken):
     def completable(self):
         return False
 
-    def complete(self, token_input):
+    def complete(self, token_input, cli=None):
         return 0, []
 
-    def match(self, token_input):
+    def match(self, token_input, cli=None):
         if isinstance(token_input, str):
             if token_input == "":
                 return MATCH_PARTIAL
@@ -105,15 +105,15 @@ class RangedDecimalToken(CliToken):
             return MATCH_PARTIAL
         return MATCH_FAILURE
 
-    def get_value(self, match_string=None):
+    def get_value(self, match_string=None, cli=None):
         try:
             number = float(match_string)
             if number >= self._start and number <= self._end:
                 return number
         except Exception:
             pass
-        return None
+        return NullTokenValue
 ```
 
 ## Further examples
-More token class examples are available in tokens.py of the package.
+More token class examples are available in tokens.py of the package and exaple CLI implementations in doc directory.

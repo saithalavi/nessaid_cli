@@ -9,7 +9,7 @@ The grammar specification is parsed with PLY python package and the CLI objects 
 
 <b>ply</b>: The lex-yacc like implementation of python. Will be used for parsing the grammar specification and tokenizing the line input
 
-<b>pyreadline</b>: For windows platforms. This is the readline implementation for windows platforms
+<b>nessaid_readline</b>: For common line reading and editing support across Windows, Linux and MAc platforms
 
 ## Enduser Utilities
 
@@ -22,6 +22,10 @@ This package provides two classes for CLI building. NessaidCmd is intended to wo
 ## Installation
 This package can be installed by cloning this repo and running python3 setup.py install from top directoy.
 It's also available in pypi. <b>pip3 install nessaid_cli</b> will install the package.
+
+## Note
+Check the example CLIs built in doc directory which has updated API usage and features. The step by step
+process of composing a CLI tool is explained in the router-box example
 
 ## The Grammar
 The grammar used to define the CLI commands is a simple context free grammar. The grammar specification can have definitions for individual tokens and multiple named grammars composed of the tokens.
@@ -159,6 +163,35 @@ test_grammar:
 ```
 will match minimum 1 and maximum 3 repetitions of test-string-constant-token
 
+### Sets
+If we want to match a number of elements in any order, the set expression can be used. The set expression is as follows
+
+```
+expr1, expr2, expr3
+```
+The above expression will match the 3 expressions in any order. One thing to be noted is, set expressions should be enclosed in
+parentheses (for mandatory matches) or braces (for optional matches)
+
+for example
+```
+(
+    "token1",
+    "token2"
+    "token3"
+)
+```
+will match any combination of the three tokens.
+
+```
+{
+    "token1",
+    {
+        "token2"
+    },
+    "token3"
+}
+```
+will match the same except that token2 can be omitted as it is optional and the whole block can be omitted as that is also optional
 ### Named grammar references
 The grammars can be referenced by their name from other grammars too, like normal tokens. See the example.
 ```
@@ -305,13 +338,14 @@ Here's the basic usage
 
 The python code test.py
 ```python
-import sys
-from nessaid_cli.compiler import compile
+import os
+from nessaid_cli.compiler import compile_grammar
 from nessaid_cli.cli import NessaidCli
 
 from nessaid_cli.tokens import (
     RangedIntToken,
-    RangedStringToken
+    RangedStringToken,
+    AlternativeStringsToken,
 )
 
 class TestCli(NessaidCli):
@@ -319,7 +353,7 @@ class TestCli(NessaidCli):
     def get_token_classes(self):
         """Method to override.
         It should return the list of token classes being used"""
-        return [RangedIntToken, RangedStringToken]
+        return [RangedIntToken, RangedStringToken, AlternativeStringsToken]
 
     def exit(self):
         """This will be called from exit command of the CLI grammar"""
@@ -327,17 +361,16 @@ class TestCli(NessaidCli):
 
 
 if __name__ == '__main__':
-    with open("test_input.g") as fd:
+
+    grammar_file = os.path.join(os.path.dirname(__file__), "test_input.g")
+
+    with open(grammar_file) as fd:
         inp_str = fd.read()
-        grammar_set = compile(inp_str)
+        grammar_set = compile_grammar(inp_str)
 
     cli = TestCli(grammar_set, prompt="# ")
-    try:
-        cli.loop.run_until_complete(cli.cmdloop('test_grammar', intro="Starting Nessaid CLI Demo"))
-        # 'test_grammar' above is the grammar to load with the CLI, part of test_input.g
-    except KeyboardInterrupt:
-        sys.exit(0)
-    sys.exit(1)
+    # 'test_grammar' is the grammar to load with the CLI, part of test_input.g
+    cli.run('test_grammar')
 ```
 
 The grammar file test_input.g
@@ -434,7 +467,6 @@ This is simply command3
 Some of the steps in above CLI implementation is automated in NessaidCmd class, which is stripped down to be used like pythons cmd package. The Cmd loop is in async mode. Here we dont have to define each grammar, instead we will add the global token and shared grammar definitions as part of the class docstring. We will define methods in our class and grammar for each command will be given as the docstring for the method. When the grammar in the docstring matches, the corresponding method will be invoked. The methods designated as Cmd command handlers should be named with a common prefix. <b>do_</b> is the default prefix used in the class. Now let's try to implement the above CLI ecample using NessaidCmd class. Note that here we need only the python file. The grammar will be docstrings
 
 ```python
-import sys
 from nessaid_cli.cmd import NessaidCmd
 
 from nessaid_cli.tokens import (
@@ -455,7 +487,7 @@ class TestCmd(NessaidCmd):
 
     def do_command1(self, number):
         r"""
-        "command1"
+        "command\n1"
         TEST_NUMBER
         <<
             $number = $2;
@@ -533,14 +565,7 @@ class TestCmd(NessaidCmd):
 if __name__ == '__main__':
     cmd = TestCmd(prompt="nessaid-cmd # ", show_grammar=True)
     #show_grammar will print the generated grammar specification
-    try:
-        cmd.loop.run_until_complete(cmd.cmdloop(intro="Starting Nessaid CMD Demo"))
-    except KeyboardInterrupt:
-        sys.exit(0)
-    except Exception as e:
-        print("Exception in cmdloop:", e)
-        sys.exit(1)
-    sys.exit(0)
+    cmd.run(intro="Starting Nessaid CMD Demo")
 ```
 
 Now let's see the interactive CLI. The commands 'exit' 'quit' and 'end' are handled by base class with the method do__exit method to end the CLI session. We may override the function to disable, reconfigure it.
@@ -725,6 +750,32 @@ nessaid-cmd # ex <ENTER>
 
 Note the parameters in the generated method grammars. They are dummy as of now.
 
+
+## Line editing support
+Supports following basic line editing options
+
+Arrow keys
+History and search CTRL+R for backward lookup, CTRL+S for forward lookup PAGE_UP for first history entry page down for last
+
+HOME or ATRL+A for beginning of line
+END or CTRL+E for end of line
+
+INSERT for toggling INSERT/REPLACE
+
+CTRL+C for canceling current input
+CTRL+D to exit CLI
+
+## A simple example
+
+An example with a sigle cli object is given in the doc directory (simple_cli.py).
+The example inplementation showcases how to match
+basic token types with auto completion and how to define new token classes
+
+## A complete workflow
+
+A working example of a minimal router-box CLI is in the doc directory. This include sub cli contexts which are used to configure
+a sub section of our configuration.
+
 ## TODO
 * Add support for non interactive processing, including processing a file content
 * Support for importing other grammar files. The parser supports import statements but processing is not there.
@@ -734,5 +785,3 @@ Note the parameters in the generated method grammars. They are dummy as of now.
 * Expensive validation and checks for recursive grammars. Basic recursive grammars are tested.
 * Enhancement of the parsers to track the syntax and parsing errors clearly with line and column numbers. The current implementation on the part is partial. Sometimes, tough to track the grammar mistakes.
 * Support for more inline functions and types. May be a way to register inline functions.
-* Enhance NessaidCli to support Cli context stack, with each CLI context having dedicated prompt and environment
-* Rework completion logic for Linux/Mac platforms. Now the tab completion is not as tidy as that of windows.

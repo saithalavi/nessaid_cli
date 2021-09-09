@@ -5,7 +5,6 @@
 # file included as part of this package.
 #
 
-import sys
 import asyncio
 
 from nessaid_cli.utils import StdStreamsHolder, convert_to_python_string
@@ -16,23 +15,21 @@ from nessaid_cli.tokens import (
     MATCH_SUCCESS,
     MATCH_PARTIAL,
     MATCH_FAILURE,
-    MATCH_AMBIGUOUS
+    MATCH_AMBIGUOUS,
+    NullTokenValue
 )
 
 from nessaid_cli.elements import (
+    GrammarWalkTree,
+    TreeNode,
+    CliArgument,
     EndOfInpuToken,
     NamedGrammar,
     GrammarRefElement,
     AlternativeInputElement,
     GrammarSpecification,
     map_grammar_arguments,
-    TokenHierarchyElement
-)
-
-from nessaid_cli.elements import (
-    SequenceInputElement,
-    OptionalInputElement,
-    CliArgument
+    OrderlessSetInputElement
 )
 
 
@@ -122,7 +119,7 @@ class ParsingResult():
 
         return (result)
 
-    def set_next_tokens(self, cur_input, tokens):
+    async def set_next_tokens(self, cli, cur_input, tokens):
         add_EOI = False
         tokens = list(tokens)
         next_tokens = set()
@@ -131,24 +128,26 @@ class ParsingResult():
 
         for t in tokens:
             if t:
+                helpstring = await t.get_helpstring(cur_input if cur_input else "", cli=cli)
                 if t.completable:
-                    _, completions = t.complete(cur_input if cur_input else "")
+                    _, completions = await cli.complete_token(t, cur_input if cur_input else "")
                     if not completions:
-                        next_tokens.add(TokenCompletion(None, t.helpstring))
+                        next_tokens.add(TokenCompletion(None, helpstring))
                     else:
                         if t.case_insensitive:
                             self.case_insensitive = True
                         for c in completions:
-                            next_tokens.add(TokenCompletion(str(c), t.helpstring))
+                            h = await t.get_helpstring(str(c), cli=cli)
+                            next_tokens.add(TokenCompletion(str(c), h))
                 else:
-                    next_tokens.add(TokenCompletion(None, t.helpstring))
+                    next_tokens.add(TokenCompletion(None, helpstring))
             else:
                 add_EOI = True
 
         self.next_tokens = list(next_tokens)
 
         if add_EOI:
-            self.next_tokens.append(EndOfInpuToken())
+            self.next_tokens.append(EndOfInpuToken)
         elif cur_input:
             common_prefix = self.common_prefix(self.next_tokens)
             if common_prefix:
@@ -161,14 +160,16 @@ class ParsingResult():
                         self.next_constant_token = self.last_token[1]
             else:
                 if tokens[0].completable:
-                    n, completion = tokens[0].complete("")
+                    _n, completion = await cli.complete_token(tokens[0], "") # noqa
                     if completion and len(completion) == 1:
                         self.next_constant_token = str(completion[0])
 
 
 class ExecContext():
 
-    def __init__(self, interface, root_grammar, arglist):
+    def __init__(self, interface, root_grammar, arglist, stop_index = 0):
+        self._counter = 1
+        self._stop_index = stop_index
         self._interface = interface
         self.print = interface.print
         self.error = interface.error
@@ -182,6 +183,7 @@ class ExecContext():
 
         self._element_stack = []
         self._grammar_stack = []
+        self._element_stack_cache = {}
 
     @property
     def root_arglist(self):
@@ -223,7 +225,7 @@ class ExecContext():
             res = res_arg
 
         if isinstance(res, str):
-            res = convert_to_python_string(res)
+            res = convert_to_python_string(str(res), cli=self._interface)
         return res
 
     async def execute_binding(self, binding_code):
@@ -256,59 +258,70 @@ class ExecContext():
                     arglist = [await self.evaluate(arg) for arg in block.arglist]
                     _ = await self._interface.execute_binding_call(ext_fn, True, *arglist)
 
-    async def enter(self, element_ctx: TokenHierarchyElement, token_value: str):
+    async def enter(self, element_node: TreeNode, token_value: str):
 
-        if element_ctx in self._element_stack:
-            element_ctx = [e for e in self._element_stack if e == element_ctx][0]
-            element_ctx.input_sequence.append(token_value)
+        if element_node.path in self._element_stack_cache:
+            element_node = self._element_stack_cache[element_node.path]
+            element_node.input_sequence.append(token_value)
             return
 
-        element_ctx.input_sequence.append(token_value)
+        element_node.input_sequence.append(token_value)
 
-        if element_ctx not in self._element_stack:
-            element = element_ctx.element
+        element = element_node.element
 
-            if element.pre_match_binding:
-                await self.execute_binding(element.pre_match_binding)
+        if element.pre_match_binding:
+            await self.execute_binding(element.pre_match_binding)
 
-            if type(element) == NamedGrammar:
-                if not self._element_stack:
-                    for arg in self._root_arglist:
-                        element_ctx.add_named_variable(arg)
-                else:
-                    grammar_ref_ctx = self._element_stack[-1]
-                    for arg in grammar_ref_ctx.named_variables.values():
-                         element_ctx.add_named_variable(arg)
-                self._grammar_stack.append(element_ctx)
-
-            elif type(element) == GrammarRefElement:
-                arglist = [NamedVariable(param.name) for param in element.value.param_list]
-                param_mapping = map_grammar_arguments(element.name, element.value.param_list, element.arg_list)
-                for arg in arglist:
-                    if arg.var_id in param_mapping:
-                        res = await self.resolve_argument(param_mapping[arg.var_id])
-                        arg.assign(res)
-                        element_ctx.add_named_variable(arg)
+        if type(element) == NamedGrammar:
+            if not self._element_stack:
+                for arg in self._root_arglist:
+                    element_node.add_named_variable(arg)
             else:
-                pass
-            self._element_stack.append(element_ctx)
+                grammar_ref_ctx = self._element_stack[-1]
+                for arg in grammar_ref_ctx.named_variables.values():
+                    element_node.add_named_variable(arg)
+            self._grammar_stack.append(element_node)
 
-    async def exit(self, element_ctx: TokenHierarchyElement):
-        if element_ctx not in self._element_stack:
+        elif type(element) == GrammarRefElement:
+            arglist = [NamedVariable(param.name) for param in element.value.param_list]
+            param_mapping = map_grammar_arguments(element.name, element.value.param_list, element.arg_list)
+            for arg in arglist:
+                if arg.var_id in param_mapping:
+                    res = await self.resolve_argument(param_mapping[arg.var_id])
+                    arg.assign(res)
+                    element_node.add_named_variable(arg)
+        else:
+            pass
+        self._element_stack.append(element_node)
+        self._element_stack_cache[element_node.path] = element_node
+        """
+        print(f"{'%03d' % (self._counter, )}: Entered     :", element_node.path)
+        self._counter += 1
+        """
+
+    async def exit(self, element_node: TreeNode):
+        """
+        print(f"{'%03d' % (self.counter, )}: Exit attempt:", element_node.path)
+        self._counter += 1
+        if self._counter == self._stop_index:
+            print("Stoping to debug tree traversal")
+        """
+        if element_node.path not in self._element_stack_cache:
             raise Exception("Context missing in stack. Recheck!!!")
 
-        element_ctx = [e for e in self._element_stack if e == element_ctx][0]
+        element_node = self._element_stack_cache[element_node.path]
 
-        stack_ctx = self._element_stack.pop()
-        if element_ctx != stack_ctx:
+        stack_node = self._element_stack.pop()
+        if element_node != stack_node:
             raise Exception("Wrong context at top of stack. Recheck!!!")
+        del self._element_stack_cache[element_node.path]
 
-        element = element_ctx.element
+        element = element_node.element
         parent_context = self._element_stack[-1] if self._element_stack else None
-        grammar_context = self._grammar_stack[-1] if self._grammar_stack else None
+        # grammar_context = self._grammar_stack[-1] if self._grammar_stack else None
         parent = parent_context.element if parent_context else None
 
-        position = element.position
+        position = element_node.position
         if parent:
             if isinstance(parent, AlternativeInputElement):
                 position = 0
@@ -316,10 +329,10 @@ class ExecContext():
                 position = 0
 
         numbered_arg = TokenVariable("$" + str(position + 1))
-        if len(element_ctx.input_sequence) == 1:
-            numbered_arg.assign(element_ctx.input_sequence[0])
+        if len(element_node.input_sequence) == 1:
+            numbered_arg.assign(element_node.input_sequence[0])
         else:
-            numbered_arg.assign(element_ctx.input_sequence)
+            numbered_arg.assign(element_node.input_sequence)
 
         if parent_context:
             parent_context.add_numbered_variable(numbered_arg)
@@ -330,15 +343,21 @@ class ExecContext():
         if type(element) == NamedGrammar:
             self._grammar_stack.pop()
 
+        element_node.reset()
+
 
 class CliInterface(StdStreamsHolder):
 
-    def __init__(self, loop, grammarset, stdin=None, stdout=None, stderr=None):
+    def __init__(self, loop, grammarset,
+                 stdin=None, stdout=None, stderr=None,
+                 str_cache_size=128, token_value_cache_size=128):
 
         if not isinstance(grammarset, GrammarSpecification):
             raise ValueError("GrammarSpecification object expected")
 
         self._loop = loop
+
+        self._stop_index = 0 # To debug tree traversal bugs
 
         self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
 
@@ -350,6 +369,13 @@ class CliInterface(StdStreamsHolder):
         self._grammars = grammarset
         self._grammar_stack = []
         self._token_class_map = None
+        self._matched_values = []
+        self._parse_tree = None
+
+        self._str_cache = {}
+        self._token_value_cache = {}
+        self._str_cache_size = str_cache_size
+        self._token_value_cache_size = token_value_cache_size
 
     @property
     def loop(self):
@@ -359,58 +385,88 @@ class CliInterface(StdStreamsHolder):
     def current_grammar(self):
         return self._grammar_stack[-1] if self._grammar_stack else None
 
+    @property
+    def str_cache(self):
+        return self._str_cache
+
+    def cache_string(self, key, value):
+        self._str_cache[key] = value
+
+    def clear_str_cache(self):
+        if len(self._str_cache) > self._str_cache_size:
+            self._str_cache = {}
+
+    def clear_token_value_cache(self):
+        if len(self._token_value_cache) > self._token_value_cache_size:
+            self._token_value_cache = {}
+
+    def clear_caches(self):
+        self.clear_str_cache()
+        self.clear_token_value_cache()
+
     def enter_grammar(self, grammar_name):
         try:
             grammar = self._grammars.get_grammar(grammar_name)
             self._grammar_stack.append(grammar)
+            self._parse_tree = GrammarWalkTree(grammar)
         except Exception as e:
             raise e
 
     def exit_grammar(self):
         try:
             self._grammar_stack.pop()
+            if self._grammar_stack:
+                self._parse_tree = GrammarWalkTree(self._grammar_stack[-1])
         except Exception as e:
             raise e
 
-    def create_cli_token(self, token_name, tokendef=None):
-        return CliToken(token_name)
+    def create_cli_token(self, token_name, helpstring=None, tokendef=None): # noqa
+        return CliToken(token_name, helpstring=helpstring, cli=self)
+
+    def get_base_token_classes(self):
+        return []
 
     def get_token_classes(self):
         return []
 
-    def get_token(self, name):
+    def get_token(self, name, helpstring=None):
         if not (isinstance(name, str) and name):
             raise ValueError("Expected valid token name")
 
-        if name not in self._tokens:
+        if (name, helpstring) not in self._tokens:
+            self._token_miss += 1
             tokendef = self._grammars.get_tokendef(name)
             if tokendef:
                 if self._token_class_map is None:
-                    token_classes = self.get_token_classes()
+                    token_classes = self.get_base_token_classes() + self.get_token_classes()
                     self._token_class_map = {t.__name__: t for t in token_classes}
 
                 if tokendef.classname in self._token_class_map:
                     try:
-                        self._tokens[name] = self._token_class_map[tokendef.classname](name, *tokendef.arglist)
-                        return self._tokens[name]
+                        self._tokens[(name, helpstring)] = self._token_class_map[tokendef.classname](
+                            name, *tokendef.arglist, cli=self, helpstring=helpstring)
+                        return self._tokens[(name, helpstring)]
                     except Exception as e:
                         self.error("Exception creating token object from token def:", e)
 
                 _globals = globals()
                 if tokendef.classname in _globals:
                     try:
-                        self._tokens[name] =  _globals[tokendef.classname](name, *tokendef.arglist)
-                        return self._tokens[name]
+                        self._tokens[(name, helpstring)] =  _globals[tokendef.classname](
+                            name, *tokendef.arglist, cli=self, helpstring=helpstring)
+                        return self._tokens[(name, helpstring)]
                     except Exception as e:
                         self.error("Exception creating token object from token def:", e)
-            self._tokens[name] = self.create_cli_token(name, tokendef)
+            self._tokens[(name, helpstring)] = self.create_cli_token(name, tokendef=tokendef, helpstring=helpstring)
+        else:
+            self._token_hit += 1
 
-        return self._tokens[name]
+        return self._tokens[(name, helpstring)]
 
     def get_cli_hook(self, func_name):
         return func_name
 
-    async def resolve_local_function_call(self, func_name, *args, **kwarg):
+    async def resolve_local_function_call(self, func_name, *args, **kwarg): # noqa
         if func_name == 'list':
             l = []
             if args:
@@ -487,6 +543,9 @@ class CliInterface(StdStreamsHolder):
 
         return None
 
+    async def get_input(self, prompt, show_char):
+        raise NotImplementedError
+
     async def execute_binding_call(self, func_name: str, local_function: bool, *args, **kwarg):
         try:
             ext_args = args
@@ -510,57 +569,118 @@ class CliInterface(StdStreamsHolder):
 
     async def execute_success_sequence(self, matched_sequence, match_values, arglist):
 
-        exec_context = ExecContext(self, self.current_grammar, arglist)
-
-        hierarchies = [token.get_element_hierarchy() for token in matched_sequence]
+        exec_context = ExecContext(self, self.current_grammar, arglist, self._stop_index)
         token_values = match_values.copy()
+        sequence_copy = matched_sequence.copy()
 
-        for _ in matched_sequence:
-            hierarchy = hierarchies.pop(0)
+        m = sequence_copy.pop(0)
+        while m:
+            node = m.node
+            node_data = [node]
             token_value = token_values.pop(0)
 
-            h_copy = hierarchy.copy()
-            while h_copy:
-                parent = h_copy.pop()
-                await exec_context.enter(parent, token_value)
+            while node.parent:
+                node = node.parent
+                node_data.append(node)
 
-            element = hierarchy.pop(0) if hierarchy else None
+            node_data.reverse()
 
+            for node in node_data:
+                await exec_context.enter(node, token_value)
+
+            element = node_data.pop()
             await exec_context.exit(element)
 
-            parent = hierarchy.pop(0) if hierarchy else None
+            parent = node_data.pop() if node_data else None
+
             while(element and parent):
                 if type(parent.element) in [AlternativeInputElement]:
                     await exec_context.exit(parent)
-                elif len(parent.element) == (element.element.position + 1):
+                elif not isinstance(parent.element, OrderlessSetInputElement) and parent.child_count == (element.position + 1):
                     await exec_context.exit(parent)
                 else:
+                    _next = []
                     rest_optional = True
-                    position = element.element.position + 1
-                    while position < len(parent.element):
-                        next = parent.element.get(position)
-                        if next.mandatory:
+                    if isinstance(parent.element, OrderlessSetInputElement):
+                        filled_elems = m.lookup_path[parent.path]
+                        for i in range(parent.child_count):
+                            if i != element.position and i not in filled_elems:
+                                _next.append(parent.get(i))
+                    else:
+                        position = element.position + 1
+                        while position < parent.child_count:
+                            _next.append(parent.get(position))
+                            position += 1
+
+                    if _next:
+                        if all([n.mandatory for n in _next]):
                             rest_optional = False
-                            break
-                        if hierarchies:
+                        elif sequence_copy:
                             rest_optional = True
-                            for h in hierarchies[0]:
-                                if h.element == next:
+                            for h in sequence_copy[0].node.parents:
+                                if any([h.path == n.path for n in _next]):
                                     rest_optional = False
                                     break
-                            if not rest_optional:
-                                break
-                        position += 1
+
                     if rest_optional:
                         await exec_context.exit(parent)
                     else:
                         break
+
                 element = parent
-                parent = hierarchy.pop(0) if hierarchy else None
+                parent = node_data.pop() if node_data else None
+
+            m = sequence_copy.pop(0) if sequence_copy else None
 
         return exec_context.root_arglist
 
+    async def get_token_value(self, token, token_input):
+
+        if token.cacheable:
+            token_value_key = (token, token_input)
+            if token_value_key in self._token_value_cache:
+                self._token_value_hit += 1
+                return self._token_value_cache[token_value_key]
+
+        try:
+            self._token_value_miss += 1
+            if asyncio.iscoroutinefunction(token.get_value):
+                value = await token.get_value(token_input, cli=self)
+            else:
+                value =  token.get_value(token_input, cli=self)
+            if token.cacheable:
+                self._token_value_cache[token_value_key] = value
+            return value
+        except:
+            return NullTokenValue
+
+    def get_matched_values(self):
+        return self._matched_values.copy()
+
+    async def match_token(self, token, token_input):
+        try:
+            if asyncio.iscoroutinefunction(token.match):
+                return await token.match(token_input, cli=self)
+            else:
+                return token.match(token_input, cli=self)
+        except:
+            return MATCH_FAILURE
+
+    async def complete_token(self, token, token_input):
+        try:
+            if asyncio.iscoroutinefunction(token.complete):
+                return await token.complete(token_input, cli=self)
+            else:
+                return token.complete(token_input, cli=self)
+        except:
+            return 0, []
+
     async def match(self, tok_list, dry_run=False, last_token_complete=False, arglist=None):
+
+        self._token_hit = 0
+        self._token_miss = 0
+        self._token_value_hit = 0
+        self._token_value_miss = 0
 
         if not arglist:
             args = []
@@ -575,7 +695,7 @@ class CliInterface(StdStreamsHolder):
         cur_token_input = None
         token_list = tok_list.copy()
 
-        prompt_choices = set(self.current_grammar.first(root_grammar=self.current_grammar))
+        prompt_choices = set(self._parse_tree.first())
 
         res = ParsingResult()
 
@@ -585,17 +705,17 @@ class CliInterface(StdStreamsHolder):
             res.error = "No matching start tokens"
             return res
 
-        def set_next_tokens(res, choices):
+        async def set_next_tokens(res, choices):
             next_tokens = set()
             add_EOT = False
             for c in choices:
                 if not c:
                     add_EOT = True
                     continue
-                next_tokens.add(self.get_token(c.name))
+                next_tokens.add(self.get_token(c.name, c.helpstring))
             if add_EOT:
-                next_tokens.add(EndOfInpuToken())
-            return res.set_next_tokens(None if last_token_complete else cur_token_input, next_tokens)
+                next_tokens.add(EndOfInpuToken)
+            return await res.set_next_tokens(self, None if last_token_complete else cur_token_input, next_tokens)
 
         initial = True
         seq_copy = []
@@ -613,20 +733,34 @@ class CliInterface(StdStreamsHolder):
                 partial_matches = []
                 choices = matching_seq_choices.pop(0)
 
+                try:
+                    self._matched_values = []
+                    i = 0
+                    for t in sequence:
+                        token = self.get_token(t.name)
+                        value = await self.get_token_value(token, tok_list[i])
+                        if value is not NullTokenValue:
+                            self._matched_values.append(value)
+                        i += 1
+                except Exception as e:
+                    print("Exception getting matched values:", type(e), e, file=self._stderr)
+
                 for c in choices:
-                    if self.get_token(c.name).match(cur_token_input) == MATCH_SUCCESS:
-                        full_matches.append(sequence + [c])
-                    if self.get_token(c.name).match(cur_token_input) == MATCH_PARTIAL:
+                    token = self.get_token(c.name)
+                    if await self.match_token(token, cur_token_input) == MATCH_SUCCESS:
+                        if await self.get_token_value(token, cur_token_input) is not NullTokenValue:
+                            full_matches.append(sequence + [c])
+                    if await self.match_token(token, cur_token_input) == MATCH_PARTIAL:
                         partial_matches.append(sequence + [c])
 
                 for f in full_matches:
-                    matching_sequences.append(f)
+                    self.append_matching_sequence(matching_sequences, f)
 
                 completion = []
                 for p in partial_matches:
                     token = self.get_token(p[-1].name)
                     if token.completable:
-                        n, comps = token.complete(cur_token_input)
+                        _n, comps = await self.complete_token(token, cur_token_input) # noqa
                         completion += comps
 
                 for p in partial_matches:
@@ -634,33 +768,36 @@ class CliInterface(StdStreamsHolder):
                     if token.completable:
                         if completion:
                             if dry_run and not token_list and not last_token_complete:
-                                matching_sequences.append(p)
+                                self.append_matching_sequence(matching_sequences, p)
                             elif len(completion) == 1:
-                                n, comps = token.complete(cur_token_input)
+                                _n, comps = await self.complete_token(token, cur_token_input) # noqa
                                 if len(comps) == 1:
-                                    matching_sequences.append(p)
-                            elif token.get_value(cur_token_input):
-                                matching_sequences.append(p)
+                                    val = await self.get_token_value(token, cur_token_input)
+                                    if val is not NullTokenValue:
+                                        self.append_matching_sequence(matching_sequences, p)
+                            elif await self.get_token_value(token, cur_token_input) is not NullTokenValue:
+                                self.append_matching_sequence(matching_sequences, p)
                             else:
                                 res.result = MATCH_FAILURE
                                 res.offending_token = tok_list[len(res.matched_sequence)]
                                 res.offending_token_position = len(res.matched_sequence)
                                 res.error = "Ambiguous options matched for the input token: {}".format(
                                     tok_list[len(res.matched_sequence)])
+                                self.clear_caches()
                                 return res
                         elif dry_run and not token_list and not last_token_complete:
-                            matching_sequences.append(p)
+                            self.append_matching_sequence(matching_sequences, p)
                         elif len(partial_matches) == 1:
-                            v = token.get_value(cur_token_input)
-                            if v is not None:
-                                matching_sequences.append(p)
+                            v = await self.get_token_value(token, cur_token_input)
+                            if v is not NullTokenValue:
+                                self.append_matching_sequence(matching_sequences, p)
                     else:
-                        v = token.get_value(cur_token_input)
-                        if v is not None:
-                            matching_sequences.append(p)
+                        v = await self.get_token_value(token, cur_token_input)
+                        if v is not NullTokenValue:
+                            self.append_matching_sequence(matching_sequences, p)
                         elif dry_run:
                             if not token_list and not last_token_complete:
-                                matching_sequences.append(p)
+                                self.append_matching_sequence(matching_sequences, p)
 
             if not initial:
 
@@ -676,14 +813,26 @@ class CliInterface(StdStreamsHolder):
                         if len(tok_list) > len(res.matched_sequence):
                             res.offending_token = tok_list[len(res.matched_sequence)]
                             res.offending_token_position = len(res.matched_sequence)
+                    self.clear_caches()
                     return res
 
                 prompt_choices = set()
 
                 for matching_sequence in matching_sequences:
                     choices = set()
+                    try:
+                        self._matched_values = []
+                        i = 0
+                        for t in matching_sequence:
+                            token = self.get_token(t.name)
+                            value = await self.get_token_value(token, tok_list[i])
+                            if value is not NullTokenValue:
+                                self._matched_values.append(value)
+                            i += 1
+                    except Exception as e:
+                        print("Exception getting matched values:", type(e), e, file=self._stderr)
                     last_token = matching_sequence[-1]
-                    if last_token == EndOfInpuToken():
+                    if last_token == EndOfInpuToken:
                         seq_complete = True
                     else:
                         if (not token_list) and (not last_token_complete):
@@ -691,7 +840,7 @@ class CliInterface(StdStreamsHolder):
                         else:
                             nexts = last_token.next()
                             for c in nexts:
-                                if c == EndOfInpuToken():
+                                if c == EndOfInpuToken:
                                     seq_complete = True
                                 else:
                                     choices.add(c)
@@ -702,31 +851,34 @@ class CliInterface(StdStreamsHolder):
 
             if not token_list:
                 if seq_complete:
-                    prompt_choices.add(EndOfInpuToken())
+                    prompt_choices.add(EndOfInpuToken)
 
                 if prompt_choices:
-                    set_next_tokens(res, prompt_choices)
+                    await set_next_tokens(res, prompt_choices)
                 else:
                     res.result = MATCH_FAILURE
                     if cur_token_input:
                         res.offending_token = cur_token_input
                     res.error = "Could not match any rule for this sequence"
+                    self.clear_caches()
                     return res
 
                 if matching_sequences:
                     res.matched_sequence.append(cur_token_input)
                     if not dry_run:
                         if seq_complete and len(matching_sequences) > 1:
-                            matching_sequences = self.fix_sequences(matching_sequences, tok_list)
+                            matching_sequences = await self.fix_sequences(matching_sequences, tok_list)
 
                         if seq_complete:
                             if len(matching_sequences) == 1:
                                 tok_index = 0
                                 match_values = []
+                                self._matched_values = []
                                 for t in matching_sequences[0]:
                                     token = self.get_token(t.name)
-                                    match_value = token.get_value(tok_list[tok_index])
+                                    match_value = await self.get_token_value(token, tok_list[tok_index])
                                     match_values.append(match_value)
+                                    self._matched_values.append(match_value)
                                     tok_index += 1
                                 res.matched_values = match_values
                                 root_arglist = await self.execute_success_sequence(matching_sequences[0], match_values, args)
@@ -744,9 +896,11 @@ class CliInterface(StdStreamsHolder):
                             else:
                                 res.result = MATCH_FAILURE
                                 res.error = "Could not successfully match any rule with the input"
+                        self.clear_caches()
                         return res
                     else:
                         res.result = MATCH_PARTIAL
+                        self.clear_caches()
                         return res
             else:
                 if cur_token_input:
@@ -759,22 +913,45 @@ class CliInterface(StdStreamsHolder):
                     matching_seq_choices = [prompt_choices]
                 matching_sequences = []
 
-    def fix_sequences(self, matching_sequences, tok_list):
+    def check_orderless_set_elements(self, tokens):
+        elements = set([t.node.element for t in tokens])
+        return True if len(elements) == 1 else False
+
+    def append_matching_sequence(self, matching_sequences, match):
+        for seq in matching_sequences:
+            if len(seq) == len(match):
+                if all([self.check_orderless_set_elements([seq[i], match[i]]) for i in range(len(seq))]):
+                    # return
+                    pass
+        matching_sequences.append(match)
+
+    async def fix_sequences(self, matching_sequences, tok_list):
         if len(set(len(seq) for seq in matching_sequences)) == 1:
             seq_count = len(matching_sequences)
             seq_length = len(matching_sequences[0])
 
             tokens_to_keep = set([i for i in range(seq_count)])
 
+            orderless_set_check_failed = False
             for i in range(seq_length):
-                if len(set(seq[i] for seq in matching_sequences)) == 1:
+                tokens = set(seq[i] for seq in matching_sequences)
+                if not self.check_orderless_set_elements(tokens):
+                    orderless_set_check_failed = True
+
+            if not orderless_set_check_failed:
+                return [matching_sequences[0]]
+
+            for i in range(seq_length):
+                tokens = set(seq[i] for seq in matching_sequences)
+                if len(tokens) == 1:
                     continue
                 else:
                     toc_types = []
                     for j in range(seq_count):
                         toc = matching_sequences[j][i]
                         token = self.get_token(toc.name)
-                        toc_types.append(token.match(tok_list[i]))
+                        match = await self.match_token(token, tok_list[i])
+                        toc_types.append(match)
 
                     if MATCH_SUCCESS in toc_types:
                         for j in range(seq_count):

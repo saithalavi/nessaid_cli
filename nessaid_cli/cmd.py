@@ -5,16 +5,28 @@
 # file included as part of this package.
 #
 
+# pylint: disable=method-hidden
+
+import os
+import time
+import pstats
+import cProfile
+
 import asyncio
 import inspect
 import textwrap
+import linecache
+import tracemalloc
+from datetime import datetime
 
-from nessaid_cli.cli import NessaidCli
-from nessaid_cli.compiler import compile
+from nessaid_cli.compiler import compile_grammar
+from nessaid_cli.cli import NessaidCli, ChildCliExitException
+from nessaid_cli.tokens import RangedIntToken, MATCH_SUCCESS, MATCH_FAILURE, MATCH_PARTIAL, MATCH_AMBIGUOUS
 
 
 class NessaidCmd(NessaidCli):
     """
+    token TRACEMALLOC_LIMIT RangedIntToken(1, 100);
     """
     """
     Base Cmd class
@@ -24,6 +36,9 @@ class NessaidCmd(NessaidCli):
     The input will be matched as per the grammar specification given as the docstring and
     the function. The global grammar definitions should go as the derived class's docstring
     """
+
+    def get_token_classes(self):
+        return [RangedIntToken]
 
     def generate_grammar_name(self, hookmethod):
         """Generate the grammar name used in the grammar
@@ -56,8 +71,10 @@ class NessaidCmd(NessaidCli):
             formatted = textwrap.dedent(grammar_text)
         return formatted
 
-    def __init__(self, loop=None, prompt=None, cli_hook_prefix="do_", cli_nargs=3,
-                 stdin=None, stdout=None, stderr=None, completekey='tab', use_rawinput=True, show_grammar=False):
+    def __init__(self, loop=None, parent=None, prompt=None, cli_hook_prefix="do_", cli_nargs=3,
+                 stdin=None, stdout=None, stderr=None, enable_bell=False, do_tracemalloc=False,
+                 disable_default_hooks=False, use_base_grammar=True, use_parent_grammar=True, completekey='tab',
+                 use_rawinput=True, show_grammar=False, str_cache_size=128, match_parent_grammar=False):
         """Creates a Cmd instance
 
         :param loop: the event loop used to run the Cmd loop.
@@ -67,13 +84,41 @@ class NessaidCmd(NessaidCli):
         :param show_grammar: print the generated grammar before the Cmd prompt.
         """
 
+        if do_tracemalloc:
+            if not tracemalloc.is_tracing():
+                tracemalloc.start()
+        else:
+            self.do__tracemalloc = None
+
+        self._do_tracemalloc = do_tracemalloc
+
         self._stdin = stdin
         self._stdout = stdout
         self._stderr = stderr
+        self._parent = parent
+        self._last_tracemalloc_snapshot = None
+
+        self._enable_timing = False
+        self._enable_profiling = False
+        self._timing_command = False
+        self._match_parent_grammar = match_parent_grammar
+        self._use_base_grammar = use_base_grammar
+        self._use_parent_grammar = use_parent_grammar
+
+        enable_bell = False if enable_bell is not True else True
+
+        if disable_default_hooks is True:
+            self.do__exit = None
+            self.do__timing = None
+            self.do__profile = None
 
         self.execute_line = self.exec_line
         self.execute_args = self.exec_args
-        grammar_text = self.__doc__ if self.__doc__ else ""
+        if self._use_base_grammar:
+            grammar_text = NessaidCmd.__doc__
+        else:
+            grammar_text = ""
+        grammar_text += self.global_grammar
         grammar_hooks = [getattr(self, f) for f in dir(self) if f.startswith(cli_hook_prefix) and callable(getattr(self, f))]
         grammar_alternatives = []
 
@@ -115,13 +160,98 @@ class NessaidCmd(NessaidCli):
                 self.print("# Generated CLI grammar:")
                 self.print(grammar_text)
 
-            grammar_set = compile(grammar_text)
-            super().__init__(grammar_set, prompt=prompt, loop=loop,
-                 stdin=stdin, stdout=stdout, stderr=stderr, completekey=completekey, use_rawinput=use_rawinput)
+            grammar_set = compile_grammar(grammar_text)
+            super().__init__(
+                grammar_set, prompt=prompt, parent=parent, loop=loop, enable_bell=enable_bell,
+                stdin=stdin, stdout=stdout, stderr=stderr,
+                completekey=completekey, use_rawinput=use_rawinput, str_cache_size=str_cache_size
+            )
+
+    @property
+    def global_grammar(self):
+        grammar = ""
+        if self._use_parent_grammar and self.parent:
+            grammar += self.parent.global_grammar
+        grammar += self.__doc__ if self.__doc__ else ""
+        return grammar
+
+    def do__tracemalloc(self, limit, delta): # noqa
+        """
+        << $limit = 20; $delta = False; >>
+        "tracemalloc"
+        {
+            {
+                "delta"
+                << $delta = True; >>
+            },
+            {
+                TRACEMALLOC_LIMIT
+                << $limit = $1; >>
+            }
+        }
+        """
+        key_type='lineno'
+        lines = []
+
+        snapshot = tracemalloc.take_snapshot()
+        snapshot = snapshot.filter_traces(
+            (
+                tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
+                tracemalloc.Filter(False, "<unknown>"),
+            )
+        )
+
+        top_stats = snapshot.statistics(key_type)
+
+        lines.append("Top %s lines" % limit)
+        for index, stat in enumerate(top_stats[:limit], 1):
+            frame = stat.traceback[0]
+            filename = os.sep.join(frame.filename.split(os.sep)[-2:])
+            lines.append("#%s: %s:%s: %.1f KiB" % (index, filename, frame.lineno, stat.size / 1024))
+            line = linecache.getline(frame.filename, frame.lineno).strip()
+            if line:
+                lines.append('    %s' % line)
+        other = top_stats[limit:]
+        if other:
+            size = sum(stat.size for stat in other)
+            lines.append("%s other: %.1f KiB" % (len(other), size / 1024))
+        total = sum(stat.size for stat in top_stats)
+        lines.append("Total allocated size: %.1f KiB" % (total / 1024))
+
+        for line in lines:
+            print(line, file=self.stdout)
+
+        if delta:
+            if not self.last_tracemalloc_snapshot:
+                print("No previous snapshot available", file=self.stdout)
+                self.last_tracemalloc_snapshot = snapshot
+                return
+            top_stats = snapshot.compare_to(self.last_tracemalloc_snapshot, key_type)
+            for stat in top_stats[:limit]:
+                print(stat)
+
+        self.last_tracemalloc_snapshot = snapshot
+
+    @property
+    def last_tracemalloc_snapshot(self):
+        cli = self
+        while cli:
+            if cli._last_tracemalloc_snapshot:
+                return cli._last_tracemalloc_snapshot
+            else:
+                cli = cli.parent
+        return None
+
+    @last_tracemalloc_snapshot.setter
+    def last_tracemalloc_snapshot(self, snapshot):
+        cli = self
+        while cli:
+            cli._last_tracemalloc_snapshot = snapshot
+            cli = cli.parent
 
     def do__exit(self):
         """
-        "exit" | "quit" | "end"
+        "exit" | "quit"
         """
         self.exit_loop()
 
@@ -133,6 +263,28 @@ class NessaidCmd(NessaidCli):
         """
 
         return await super().cmdloop(grammarname=self.generate_root_grammar_name(), intro=intro)
+
+    async def context_loop(self):
+        return await super().cmdloop(grammarname=self.generate_root_grammar_name())
+
+    async def enter_context(self, cmd_class, prompt="", use_parent_grammar=False,
+                            match_parent_grammar=False, disable_default_hooks=True, **kwargs):
+        self.child_cli = cmd_class(
+            loop=self.loop,
+            prompt=prompt,
+            parent=self,
+            stdin=self.stdin,
+            stdout=self.stdout,
+            stderr=self.stderr,
+            use_parent_grammar=use_parent_grammar,
+            disable_default_hooks=disable_default_hooks,
+            completekey=self._completekey,
+            use_rawinput=self._use_rawinput,
+            show_grammar=False,
+            str_cache_size=self._str_cache_size,
+            do_tracemalloc=self._do_tracemalloc,
+            match_parent_grammar=match_parent_grammar, **kwargs
+        )
 
     def run(self, intro=None):
         loop = self.loop or asyncio.get_event_loop()
@@ -193,3 +345,144 @@ class NessaidCmd(NessaidCli):
             self.exit_grammar()
         return 0
 
+    async def _match(self, tok_list, dry_run=False, last_token_complete=False, arglist=None):
+
+        self._timing_command = False
+
+        enable_profiling = self._enable_profiling
+
+        if dry_run or not tok_list:
+            return await super().match(tok_list=tok_list, dry_run=dry_run,
+                                       last_token_complete=last_token_complete, arglist=arglist)
+
+        start = time.time()
+        if self._enable_profiling:
+            with cProfile.Profile() as pr:
+                res = await super().match(tok_list, dry_run, last_token_complete, arglist)
+            if self._enable_profiling and enable_profiling:
+                stats = pstats.Stats(pr)
+                stats.sort_stats('cumtime')
+                stats.print_stats()
+                print("Token Hit:", self._token_hit)
+                print("Token Miss:", self._token_miss)
+                print("Token Value Hit:", self._token_value_hit)
+                print("Token Value Miss:", self._token_value_miss)
+        else:
+            res = await super().match(tok_list, dry_run, last_token_complete, arglist)
+        end = time.time()
+
+        if not self._timing_command and self._enable_timing:
+            print("start:", start, file=self.stdout)
+            print("end:", end, file=self.stdout)
+            print("Time taken:", end - start, file=self.stdout)
+
+        self._timing_command = False
+        self._profiling_command = False
+        return res
+
+    async def on_exit(self):
+        pass
+
+    async def match(self, tok_list, dry_run=False, last_token_complete=False, arglist=None):
+        resp = await self._match(tok_list, dry_run=dry_run, last_token_complete=last_token_complete, arglist=arglist)
+        if resp.result != MATCH_SUCCESS and self._match_parent_grammar:
+            parent_resp = await self.parent.match(
+                tok_list=tok_list, dry_run=True,
+                last_token_complete=last_token_complete, arglist=arglist
+            )
+            if resp.result == MATCH_FAILURE:
+                if parent_resp.result == MATCH_FAILURE:
+                    parent_resp = None
+            elif resp.result in [MATCH_PARTIAL, MATCH_AMBIGUOUS]:
+                if parent_resp.result != MATCH_SUCCESS:
+                    parent_resp = None
+
+            if parent_resp is not None:
+                if dry_run:
+                    return parent_resp
+                else:
+                    await self.on_exit()
+                    raise ChildCliExitException(
+                        tok_list=tok_list, dry_run=dry_run,
+                        last_token_complete=last_token_complete, arglist=arglist
+                    )
+        return resp
+
+    def do__profile(self, enable_profiling):
+        """
+        "cmd-profiling"
+        (
+            "on" << $enable_profiling = True; >>
+            |
+            "off" << $enable_profiling = False; >>
+        )
+        """
+        self._profiling_command = True
+        self._enable_profiling = enable_profiling
+
+    def do__timing(self, enable_timing):
+        """
+        "cmd-timing"
+        (
+            "on" << $enable_timing = True; >>
+            |
+            "off" << $enable_timing = False; >>
+        )
+        """
+        self._timing_command = True
+        self._enable_timing = enable_timing
+
+    def do__system_info(self):
+        """
+        "system-info"
+        """
+        try:
+            import psutil
+        except ImportError:
+            self.print("need psutil for this")
+            return
+
+        self.print("="*40, "Boot Time", "="*40)
+        boot_time_timestamp = psutil.boot_time()
+        bt = datetime.fromtimestamp(boot_time_timestamp)
+        self.print(f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}")
+
+
+        # let's print CPU information
+        self.print("="*40, "CPU Info", "="*41)
+        # number of cores
+        self.print("Physical cores:", psutil.cpu_count(logical=False))
+        self.print("Total cores:", psutil.cpu_count(logical=True))
+        # CPU frequencies
+        cpufreq = psutil.cpu_freq()
+        self.print(f"Max Frequency: {cpufreq.max:.2f}Mhz")
+        self.print(f"Min Frequency: {cpufreq.min:.2f}Mhz")
+        self.print(f"Current Frequency: {cpufreq.current:.2f}Mhz")
+        # CPU usage
+        self.print("CPU Usage Per Core:")
+        for i, percentage in enumerate(psutil.cpu_percent(percpu=True, interval=1)):
+            self.print(f"Core {i}: {percentage}%")
+        self.print(f"Total CPU Usage: {psutil.cpu_percent()}%")
+
+
+        # Memory Information
+        self.print("="*40, "Memory Information", "="*31)
+        # get the memory details
+        svmem = psutil.virtual_memory()
+        self.print(f"Total: {self.get_size(svmem.total)}")
+        self.print(f"Available: {self.get_size(svmem.available)}")
+        self.print(f"Used: {self.get_size(svmem.used)}")
+        self.print(f"Percentage: {svmem.percent}%")
+
+    def get_size(self, _bytes, suffix="B"):
+        """
+        Scale bytes to its proper format
+        e.g:
+            1253656 => '1.20MB'
+            1253656678 => '1.17GB'
+        """
+        factor = 1024
+        for unit in ["", "K", "M", "G", "T", "P"]:
+            if _bytes < factor:
+                return f"{_bytes:.2f}{unit}{suffix}"
+            _bytes /= factor

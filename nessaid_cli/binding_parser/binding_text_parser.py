@@ -182,7 +182,7 @@ class NessaidCliBindingParser(NessaidCliParserCommon):
         """none_object : NONE"""
         t[0] = None
 
-    def p_unused_token(self, t):
+    def p_unused_token(self, t): # noqa
         """unused_token : ESCAPED_NEWLINE
                         | NEWLINE
                         | LBRACKET

@@ -6,8 +6,7 @@
 #
 
 import os
-import sys
-from nessaid_cli.compiler import compile
+from nessaid_cli.compiler import compile_grammar
 from nessaid_cli.cli import NessaidCli
 
 from nessaid_cli.tokens import (
@@ -23,9 +22,6 @@ class TestCli(NessaidCli):
         It should return the list of token classes being used"""
         return [RangedIntToken, RangedStringToken, AlternativeStringsToken]
 
-    def print(self, *args):
-        print("External function:", *args)
-
     def exit(self):
         """This will be called from exit command of the CLI grammar"""
         self.exit_loop()
@@ -37,15 +33,8 @@ if __name__ == '__main__':
 
     with open(grammar_file) as fd:
         inp_str = fd.read()
-        grammar_set = compile(inp_str)
+        grammar_set = compile_grammar(inp_str)
 
     cli = TestCli(grammar_set, prompt="# ")
-    try:
-        cli.loop.run_until_complete(cli.cmdloop('test_grammar', intro="Starting Nessaid CLI Demo"))
-        # 'test_grammar' above is the grammar to load with the CLI, part of test_input.g
-    except KeyboardInterrupt:
-        sys.exit(0)
-    except Exception as e:
-        cli.error("Exception:", type(e), e)
-        sys.exit(1)
-    sys.exit(0)
+    # 'test_grammar' is the grammar to load with the CLI, part of test_input.g
+    cli.run('test_grammar')

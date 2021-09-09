@@ -5,13 +5,11 @@
 # file included as part of this package.
 #
 
-import sys
 import inspect
 import asyncio
 import unittest
 
 from nessaid_cli.cmd import NessaidCmd
-from nessaid_cli.tokenizer.tokenizer import NessaidCliTokenizer
 
 from nessaid_cli.tokens import (
     StringToken,
@@ -146,7 +144,6 @@ class CmdTest1(unittest.TestCase):
         loop = asyncio.get_event_loop()
         cmd = Cmd1(prompt="# ")
 
-        cases = []
         count = 0
 
         for p in cli_prefixes:
@@ -178,7 +175,6 @@ class CmdTest1(unittest.TestCase):
     def do_test_type_partial(self, python_type, cli_prefixes, cli_type, cli_types, type_inputs):
         loop = asyncio.get_event_loop()
         cmd = Cmd1(prompt="# ")
-        cases = []
         count = 0
 
         for p in cli_prefixes:
@@ -210,7 +206,6 @@ class CmdTest1(unittest.TestCase):
     def do_test_type_negative(self, python_type, cli_prefixes, cli_type, cli_types, type_inputs):
         loop = asyncio.get_event_loop()
         cmd = Cmd1(prompt="# ")
-        cases = []
         count = 0
 
         for p in cli_prefixes:

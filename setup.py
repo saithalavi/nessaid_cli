@@ -8,8 +8,10 @@
 import os
 import sys
 import shutil
+from pathlib import Path
 from setuptools import setup
 
+VERSION = "3.0.0"
 
 pkg_name = 'nessaid_cli'
 test_pkg_name = 'nessaid_cli_tests'
@@ -17,14 +19,26 @@ sub_packages = ['binding_parser', 'tokenizer']
 
 install_packages = [pkg_name, test_pkg_name] + [pkg_name + "." + sub_pkg for sub_pkg in sub_packages]
 
-clanup_dirs = ['build', 'dist', pkg_name + '.egg-info']
+clanup_dirs = ['build', 'dist', '.pytest_cache', pkg_name + '.egg-info']
+
+
+def rm_pycache(directory):
+    directory = Path(directory)
+    for item in directory.iterdir():
+        if str(item.parts[-1]) == '__pycache__':
+            print("removing dir:", str(item))
+            shutil.rmtree(item)
+        elif item.is_dir():
+            rm_pycache(item)
 
 
 def do_cleanup_fixes():
+    rm_pycache(".")
     dir_content = os.listdir()
     for d in clanup_dirs:
         if d in dir_content:
             try:
+                print("removing dir:", str(d))
                 shutil.rmtree(d)
             except Exception:
                 pass
@@ -68,7 +82,7 @@ install_requires = [
 
 setup(
     name=pkg_name,
-    version='2.2.0',
+    version=VERSION,
     url='https://github.com/saithalavi/nessaid_cli',
     description="Nessaid's CLI tools",
     long_description=long_description,

@@ -87,7 +87,7 @@ class NessaidCliLexerCommon(StdStreamsHolder):
     t_DOLLAR_NUMBER_ID   = r'[\$][0-9]+'
     t_DOLLAR_VAR_ID      = r'[\$][A-Za-z_][a-zA-Z0-9_]*'
 
-    def t_eof(self, t):
+    def t_eof(self, t): # noqa
         return None
 
     t_ignore  = ' \t'
@@ -123,7 +123,7 @@ class NessaidCliLexerCommon(StdStreamsHolder):
         self.error(err_msg)
         raise CliLexerError(err_msg)
 
-    def count_newlines(self, pattern, **kwargs):
+    def count_newlines(self, pattern, **kwargs): # noqa
         m = pattern
         m.replace("\r\n", "\n")
         m.replace("\r", "\n")
@@ -181,7 +181,7 @@ class NessaidCliLexerCommon(StdStreamsHolder):
     def size_till_last_newline(self):
         return self._size_till_last_newline
 
-    def __init__(self, lineno=1, linepos=0, stdin=None, stdout=None, stderr=None):
+    def __init__(self, lineno=1, linepos=0, stdin=None, stdout=None, stderr=None): # noqa
 
         self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
 
@@ -195,15 +195,14 @@ class NessaidCliLexerCommon(StdStreamsHolder):
 class NessaidCliParserCommon(StdStreamsHolder):
 
     def __init__(self, stdin=None, stdout=None, stderr=None):
-
         self.init_streams(stdin=stdin, stdout=stdout, stderr=stderr)
-
         self._parser = None
         self._parser = yacc.yacc(module=self, debug=False, write_tables=False)
 
     @property
     def lexer(self):
-        return self._lexer
+        # pylint: disable=no-member
+        return self._lexer # noqa
 
     @property
     def parser(self):

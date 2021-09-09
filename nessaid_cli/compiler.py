@@ -17,6 +17,7 @@ from nessaid_cli.elements import (
     SequenceInputElement,
     OptionalInputElement,
     AlternativeInputElement,
+    OrderlessSetInputElement,
     NamedGrammar,
     GrammarRefElement,
     UnresolvedInputElement,
@@ -124,7 +125,6 @@ class NessaidCliParser(NessaidCliParserCommon):
 
     def p_grammar_spec(self, t):
         """grammar_spec : content empty"""
-        content = t[1]
         grammar_spec = self._grammar_spec
         t[0] = grammar_spec
 
@@ -324,10 +324,10 @@ class NessaidCliParser(NessaidCliParserCommon):
         unit = t[2]
         binding = t[1]
         if binding:
-            compiled_binding = []
+            compiled_binding = ()
             for b in binding:
                 cb = self.compile_binding(b)
-                compiled_binding.append(cb)
+                compiled_binding = compiled_binding + (cb, )
             unit.pre_match_binding = compiled_binding + unit.pre_match_binding
         t[0] = unit
 
@@ -338,6 +338,17 @@ class NessaidCliParser(NessaidCliParserCommon):
             unit = sequence[0]
         else:
             unit = SequenceInputElement(tuple(sequence))
+            for elem in sequence:
+                elem.parent = unit
+        t[0] = unit
+
+    def p_unit_orderless_set(self, t):
+        'unit : orderless_set'
+        sequence = t[1]
+        if len(sequence) == 1:
+            unit = sequence[0]
+        else:
+            unit = OrderlessSetInputElement(tuple(sequence))
             for elem in sequence:
                 elem.parent = unit
         t[0] = unit
@@ -353,6 +364,20 @@ class NessaidCliParser(NessaidCliParserCommon):
         """term_sequence : term_with_binding"""
         term = t[1]
         t[0] = [term]
+
+    def p_orderless_set(self, t):
+        """orderless_set : orderless_set COMMA term_with_binding"""
+        orderless_set = t[1]
+        term = t[3]
+        orderless_set = orderless_set + (term,)
+        t[0] = orderless_set
+
+    def p_minimal_orderless_set(self, t):
+        """orderless_set : term_with_binding COMMA term_with_binding"""
+        elem_1 = t[1]
+        elem_2 = t[3]
+        orderless_set = tuple([elem_1, elem_2])
+        t[0] = orderless_set
 
     def compile_binding(self, binding):
         if binding is None:
@@ -372,13 +397,29 @@ class NessaidCliParser(NessaidCliParserCommon):
         term = t[1]
         binding = t[2]
         if binding:
-            compiled_binding = []
+            compiled_binding = ()
             for b in binding:
                 cb = self.compile_binding(b)
-                compiled_binding.append(cb)
+                compiled_binding = compiled_binding + (cb, )
             term.post_match_binding = term.post_match_binding + compiled_binding
 
         t[0] = term
+
+    def p_term_identifier_with_help(self, t):
+        'term : identifier COLON string_object'
+        identifier = t[1]
+        helpstring = t[3]
+
+        tokendef = self._grammar_spec.get_tokendef(identifier)
+        if tokendef:
+            term = identifier
+            elem = KeywordInputElement(term, helpstring)
+            t[0] = elem
+            return
+
+        elem = UnresolvedInputElement(identifier)
+        self._grammar_spec.add_unresolved_element(elem)
+        t[0] = elem
 
     def p_term_identifier(self, t):
         'term : identifier'
@@ -516,6 +557,13 @@ class NessaidCliParser(NessaidCliParserCommon):
         elem = ConstantInputElement(string_object)
         t[0] = elem
 
+    def p_term_quoted_string_with_help(self, t):
+        'term : string_object COLON string_object'
+        string_object = t[1]
+        help_string = t[3]
+        elem = ConstantInputElement(string_object, help_string)
+        t[0] = elem
+
     def p_identifier(self, t):
         """identifier : IDENTIFIER
                       | usable_keywords"""
@@ -649,7 +697,8 @@ class NessaidCliParser(NessaidCliParserCommon):
 
     def parse(self, input_str):
         self.lexer.enter_state(NessaidCliLexer.INITIAL_STATE)
-        return self.parser.parse(input_str, lexer=self.lexer.lexer)
+        gs = self.parser.parse(input_str, lexer=self.lexer.lexer)
+        return gs
 
     def __init__(self, stdin=None, stdout=None, stderr=None):
         self._grammar_spec = GrammarSpecification()
@@ -658,7 +707,7 @@ class NessaidCliParser(NessaidCliParserCommon):
         super().__init__(stdin=stdin, stdout=stdout, stderr=stderr)
 
 
-def compile(input_str: str):
+def compile_grammar(input_str: str):
     """Compile the grammar specification in str format to a GrammarSpecification object
 
     :param input_str: The grammar specification as string

@@ -24,8 +24,8 @@ ESCAPED_CHAR_INPUTS = [
 
 class ExtendedString(str):
 
-    def __new__(cls, value, *args, **kwargs):
-    	return super(ExtendedString, cls).__new__(cls, value)
+    def __new__(cls, value, *args, **kwargs): # noqa
+        return super(ExtendedString, cls).__new__(cls, value)
 
     def __init__(self, value, *args, **kwargs):
         self._args = args
@@ -37,7 +37,10 @@ class ExtendedString(str):
         return str(self)
 
 
-def convert_to_python_string(cli_string):
+def convert_to_python_string(cli_string, cli=None):
+
+    if cli and cli_string in cli.str_cache:
+        return cli.str_cache[cli_string]
 
     converted_str = cli_string
 
@@ -64,11 +67,21 @@ def convert_to_python_string(cli_string):
             converted_parts.append(part)
 
         converted_str = "\\".join(converted_parts)
+
+    if cli:
+        cli.cache_string(cli_string, converted_str)
+
     return converted_str
 
 
 def convert_to_cli_string(python_string):
-    if any(c in python_string for c in ["\n", "\0", "\r", "\t", "\b", "\a", "\v", '"']):
+    if any(c in python_string for c in [" ", "\n", "\0", "\r", "\t", "\b", "\a", "\v", '"']):
+
+        if python_string.startswith('"'):
+            python_string = python_string[1:]
+        if python_string.endswith('"'):
+            python_string = python_string[:-1]
+
         parts = python_string.split("\\")
         converted_parts = []
         for part in parts:

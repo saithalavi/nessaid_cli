@@ -12,7 +12,6 @@ import platform
 from pathlib import Path
 
 from nessaid_cli.utils import (
-    ESCAPED_CHAR_INPUTS,
     convert_to_cli_string,
     convert_to_python_string
 )
@@ -26,10 +25,62 @@ MATCH_AMBIGUOUS = 'ambigous'
 TOO_MANY_COMPLETIONS = -1
 
 
+class _NullTokenValue():
+
+    __instance = None
+
+    @staticmethod
+    def getInstance():
+        if _NullTokenValue.__instance == None:
+            _NullTokenValue()
+        return _NullTokenValue.__instance
+
+    def __init__(self):
+        if _NullTokenValue.__instance != None:
+            raise Exception("This class is a singleton!")
+        _NullTokenValue.__instance = self
+
+    def __repr__(self):
+        return "< Null Token Value >"
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __eq__(self, rhs):
+        if isinstance(rhs, _NullTokenValue):
+            return True
+        return False
+
+    def __ne__(self, rhs):
+        if isinstance(rhs, _NullTokenValue):
+            return False
+        return True
+
+    def is_(self, rhs):
+        if isinstance(rhs, _NullTokenValue):
+            return True
+        return False
+
+    def is_not(self, rhs):
+        if isinstance(rhs, _NullTokenValue):
+            return False
+        return True
+
+    def __nonzero__(self):
+        return False
+
+    def __bool__(self):
+        return False
+
+
+NullTokenValue = _NullTokenValue.getInstance()
+
+
 class CliToken():
 
-    def __init__(self, name):
+    def __init__(self, name, helpstring=None, cli=None): # noqa
         self._name = name
+        self._helpstring = helpstring
         self._cli_string = convert_to_cli_string(name)
 
     def __repr__(self):
@@ -42,17 +93,24 @@ class CliToken():
     def case_insensitive(self):
         return False
 
-    def get_value(self, match_string=None):
+    @property
+    def cacheable(self):
+        return True
+
+    async def get_value(self, match_string=None, cli=None):
         if self.completable:
-            _, completions = self.complete(match_string)
+            _, completions = await self.complete(match_string, cli=cli)
             if len(completions) == 1:
-                return convert_to_python_string(completions[0])
-            elif self.match(match_string) == MATCH_SUCCESS:
-                return convert_to_python_string(match_string)
+                return convert_to_python_string(completions[0], cli=cli)
+            elif await self.match(match_string, cli=cli) == MATCH_SUCCESS:
+                return convert_to_python_string(match_string, cli=cli)
         else:
-            if self.match(match_string) == MATCH_SUCCESS:
-                return convert_to_python_string(match_string)
-        raise ValueError("Fix matching logic for this token: {}".format(self.__class__.__name__))
+            if await self.match(match_string, cli=cli) == MATCH_SUCCESS:
+                return convert_to_python_string(match_string, cli=cli)
+        return NullTokenValue
+
+    async def get_helpstring(self, match_string=None, cli=None): # noqa
+        return self.helpstring
 
     @property
     def name(self):
@@ -60,13 +118,15 @@ class CliToken():
 
     @property
     def helpstring(self):
-        return self._cli_string
+        if self._helpstring is None:
+            return self._cli_string
+        return str(self._helpstring)
 
     @property
     def completable(self):
         return True
 
-    def match(self, token_input):
+    async def match(self, token_input, cli=None): # noqa
         if self._cli_string == token_input:
             return MATCH_SUCCESS
         elif self._cli_string.startswith(token_input):
@@ -74,7 +134,7 @@ class CliToken():
         else:
             return MATCH_FAILURE
 
-    def complete(self, token_input):
+    async def complete(self, token_input, cli=None): # noqa
         if not token_input:
             return 1, [self._cli_string]
         elif self._cli_string.startswith(token_input):
@@ -82,11 +142,35 @@ class CliToken():
         else:
             return 0, []
 
+    @staticmethod
+    async def complete_from_multiple(options, token_input, cli=None): # noqa
+        if not token_input:
+            return len(options), list(options)
+        completions = set()
+        for e in options:
+            if token_input and e.startswith(token_input):
+                completions.add(e)
+        return len(completions), list(completions)
+
+    @staticmethod
+    async def match_from_multiple(options, token_input, cli=None):
+        if token_input and token_input in options:
+            return MATCH_SUCCESS
+        n, completions = await CliToken.complete_from_multiple(options, token_input, cli=cli)
+        if n == TOO_MANY_COMPLETIONS:
+            return MATCH_PARTIAL
+        if not completions:
+            return MATCH_FAILURE
+        elif len(completions) == 1:
+            return MATCH_SUCCESS
+        else:
+            return MATCH_PARTIAL
+
 
 class AlternativeStringsToken(CliToken):
 
-    def __init__(self, name, alternatives, *args):
-        super().__init__(name)
+    def __init__(self, name, alternatives, *args, cli=None, helpstring=None):
+        super().__init__(name, cli=cli, helpstring=helpstring)
         if (isinstance(alternatives, list) or
             isinstance(alternatives, set) or
             isinstance(alternatives, tuple)):
@@ -99,73 +183,64 @@ class AlternativeStringsToken(CliToken):
 
     @property
     def helpstring(self):
-        return "Any one of: {}".format(set(self._cli_strings))
+        return self._helpstring or "Any one of: {}".format(set(self._cli_strings))
 
     @property
     def completable(self):
         return True
 
-    def complete(self, token_input):
-        if not token_input:
-            return len(self._cli_strings), list(self._cli_strings)
-        completions = set()
-        for e in self._cli_strings:
-            if token_input and e.startswith(token_input):
-                completions.add(e)
-        return len(completions), list(completions)
+    async def complete(self, token_input, cli=None):
+        return await CliToken.complete_from_multiple(self._cli_strings, token_input, cli=cli)
 
-    def get_value(self, match_string=None):
-        v = super().get_value(match_string)
+    async def get_helpstring(self, match_string=None, cli=None):
+        _, matches = await self.complete(match_string, cli)
+        if matches:
+            if len(matches) == 1:
+                return matches[0]
+            return "Any one of: {}".format(set(matches))
+        return self.helpstring
+
+    async def get_value(self, match_string=None, cli=None):
+        v = await super().get_value(match_string, cli=cli)
         return v
 
-    def match(self, token_input):
-        if token_input and token_input in self._cli_strings:
-            return MATCH_SUCCESS
-        n, completions = self.complete(token_input)
-        if n == TOO_MANY_COMPLETIONS:
-            return MATCH_PARTIAL
-        if not completions:
-            return MATCH_FAILURE
-        elif len(completions) == 1:
-            return MATCH_SUCCESS
-        else:
-            return MATCH_PARTIAL
+    async def match(self, token_input, cli=None):
+        return await CliToken.match_from_multiple(self._cli_strings, token_input, cli=cli)
 
 
 class StringToken(CliToken):
 
-    def __init__(self, name):
-        super().__init__(name)
+    def __init__(self, name, cli=None, helpstring=None):
+        super().__init__(name, cli=cli, helpstring=helpstring)
 
     @property
     def helpstring(self):
-        return "Any string"
+        return self._helpstring or "Any string"
 
     @property
     def completable(self):
         return False
 
-    def complete(self, token_input):
+    async def complete(self, token_input, cli=None): # noqa
         return TOO_MANY_COMPLETIONS, []
 
-    def match(self, token_input):
+    async def match(self, token_input, cli=None): # noqa
         return MATCH_PARTIAL
 
-    def get_value(self, match_string=None):
+    async def get_value(self, match_string=None, cli=None): # noqa
         if isinstance(match_string, str):
             if match_string.startswith('"'):
                 match_string = match_string[1:]
             if match_string.endswith('"'):
                 match_string = match_string[:-1]
             return match_string
-        return None
+        return NullTokenValue
 
 
 class RangedStringToken(StringToken):
 
-    def __init__(self, name, min_len, max_len):
-        min
-        super().__init__(name)
+    def __init__(self, name, min_len, max_len, cli=None, helpstring=None):
+        super().__init__(name, cli=cli, helpstring=helpstring)
         self._min_len = min(int(min_len), int(max_len))
         self._max_len = max(int(min_len), int(max_len))
 
@@ -174,24 +249,24 @@ class RangedStringToken(StringToken):
 
     @property
     def helpstring(self):
-        return "Any string of length ({}-{})".format(self._min_len, self._max_len)
+        return self._helpstring or "Any string of length ({}-{})".format(self._min_len, self._max_len)
 
     @property
     def completable(self):
         return False
 
-    def complete(self, token_input):
+    async def complete(self, token_input, cli=None): # noqa
         return TOO_MANY_COMPLETIONS, []
 
-    def get_value(self, match_string=None):
-        s = super().get_value(match_string)
+    async def get_value(self, match_string=None, cli=None):
+        s = await super().get_value(match_string, cli=cli)
         if isinstance(s, str):
             if len(s) >= self._min_len and len(s) <= self._max_len:
                 return s
-        return None
+        return NullTokenValue
 
-    def match(self, token_input):
-        val = super().get_value(token_input)
+    async def match(self, token_input, cli=None):
+        val = await super().get_value(token_input, cli=cli)
         if len(val) > self._max_len:
             return MATCH_FAILURE
         if len(val) == self._max_len:
@@ -201,32 +276,33 @@ class RangedStringToken(StringToken):
 
 class RangedIntToken(CliToken):
 
-    def __init__(self, name, start, end, max_suggestions=10):
+    def __init__(self, name, start, end, max_suggestions=10, cli=None, helpstring=None):
         start = int(start)
         end = int(end)
-        super().__init__(name)
+        super().__init__(name, cli=cli, helpstring=helpstring)
         self._start = min(start, end)
         self._end = max(start, end)
         self._max_suggestions = max_suggestions
 
     @property
     def helpstring(self):
-        return "An integer between {} and {}".format(self._start, self._end)
+        return self._helpstring or "An integer between {} and {}".format(self._start, self._end)
 
-    def get_value(self, match_string=None):
+    async def get_value(self, match_string=None, cli=None): # noqa
         try:
-            number = int(match_string)
-            if number >= self._start and number <= self._end:
-                return number
+            if match_string.isnumeric():
+                number = int(match_string)
+                if number >= self._start and number <= self._end:
+                    return number
         except Exception:
             pass
-        return None
+        return NullTokenValue
 
     @property
     def completable(self):
         return True
 
-    def _complete(self, min_limit, max_limit, number):
+    async def _complete(self, min_limit, max_limit, number):
 
         if number == 0:
             if (max_limit - min_limit + 1) > self._max_suggestions:
@@ -293,16 +369,16 @@ class RangedIntToken(CliToken):
 
         return count, completions
 
-    def match(self, token_input):
+    async def match(self, token_input, cli=None):
         if isinstance(token_input, str):
-            n, comps = self.complete(token_input)
+            n, _comps = await self.complete(token_input, cli=cli) # noqa
             if n > 1 or n == TOO_MANY_COMPLETIONS:
                 return MATCH_PARTIAL
             elif n == 1:
                 return MATCH_SUCCESS
         return MATCH_FAILURE
 
-    def complete(self, token_input):
+    async def complete(self, token_input, cli=None): # noqa
         if isinstance(token_input, str) and str:
             count = 0
             comps = []
@@ -314,7 +390,7 @@ class RangedIntToken(CliToken):
                     comp_args = [0, -self._start, 0]
                 else:
                     comp_args = [-self._end, -self._start, 0]
-                n, comps = self._complete(*comp_args)
+                n, comps = await self._complete(*comp_args)
                 if n > 0 and not comps:
                     return TOO_MANY_COMPLETIONS, []
                 return n, [-c for c in comps]
@@ -334,7 +410,10 @@ class RangedIntToken(CliToken):
 
             else:
                 try:
-                    number = int(token_input)
+                    if token_input.isnumeric():
+                        number = int(token_input)
+                    else:
+                        return 0, []
                 except Exception:
                     return 0, []
 
@@ -348,7 +427,7 @@ class RangedIntToken(CliToken):
                     else:
                         comp_args = [-self._end, -self._start, -number]
 
-                    n, comps = self._complete(*comp_args)
+                    n, comps = await self._complete(*comp_args)
                     if n > 0 and not comps:
                         return TOO_MANY_COMPLETIONS, []
                     return n, [str(-c) for c in comps]
@@ -360,7 +439,7 @@ class RangedIntToken(CliToken):
                         comp_args = [0, self._end, number]
                     else:
                         comp_args = [self._start, self._end, number]
-                    n, comps = self._complete(*comp_args)
+                    n, comps = await self._complete(*comp_args)
                     if n > 0 and not comps:
                         return TOO_MANY_COMPLETIONS, []
                     return n,  [str(c) for c in comps]
@@ -368,25 +447,25 @@ class RangedIntToken(CliToken):
 
 class RangedDecimalToken(CliToken):
 
-    def __init__(self, name, start, end):
+    def __init__(self, name, start, end, cli=None, helpstring=None):
         start = float(start)
         end = float(end)
-        super().__init__(name)
+        super().__init__(name, cli=cli, helpstring=helpstring)
         self._start = min(start, end)
         self._end = max(start, end)
 
     @property
     def helpstring(self):
-        return "A decimal number between {} and {}".format(self._start, self._end)
+        return self._helpstring or "A decimal number between {} and {}".format(self._start, self._end)
 
     @property
     def completable(self):
         return False
 
-    def complete(self, token_input):
+    async def complete(self, token_input, cli=None): # noqa
         return 0, []
 
-    def match(self, token_input):
+    async def match(self, token_input, cli=None): # noqa
         if isinstance(token_input, str):
             if token_input == "":
                 return MATCH_PARTIAL
@@ -405,15 +484,14 @@ class RangedDecimalToken(CliToken):
             return MATCH_PARTIAL
         return MATCH_FAILURE
 
-    def get_value(self, match_string=None):
+    async def get_value(self, match_string=None, cli=None): # noqa
         try:
             number = float(match_string)
             if number >= self._start and number <= self._end:
                 return number
         except Exception:
             pass
-        return None
-
+        return NullTokenValue
 
 
 class PathTokenPath():
@@ -435,8 +513,8 @@ class PathTokenPath():
 
 class BooleanToken(StringToken):
 
-    def __init__(self, name):
-        super().__init__(name)
+    def __init__(self, name, cli=None, helpstring=None):
+        super().__init__(name, cli=cli, helpstring=helpstring)
 
     @property
     def completable(self):
@@ -448,9 +526,9 @@ class BooleanToken(StringToken):
 
     @property
     def helpstring(self):
-        return "True or False"
+        return self._helpstring or "True or False"
 
-    def complete(self, str_input):
+    async def complete(self, str_input, cli=None): # noqa
         if not str_input:
             return 2, ["True", "False"]
         elif str_input.lower() in ["true", "false"]:
@@ -461,8 +539,8 @@ class BooleanToken(StringToken):
             return 1, [str_input + "false"[len(str_input):]]
         return 0, []
 
-    def match(self, str_input):
-        n, l = self.complete(str_input)
+    async def match(self, str_input, cli=None):
+        n, _l = await self.complete(str_input, cli=cli) # noqa
         if n == 0:
             return MATCH_FAILURE
         elif n == 1:
@@ -470,13 +548,13 @@ class BooleanToken(StringToken):
                 return MATCH_SUCCESS
         return MATCH_PARTIAL
 
-    def get_value(self, str_input):
-        n, l = self.complete(str_input)
+    async def get_value(self, str_input, cli=None):
+        n, l = await self.complete(str_input, cli=cli)
         if n == 1:
             if l[0].lower() == "true":
                 return True
             return False
-        return None
+        return NullTokenValue
 
 
 class PathToken(StringToken):
@@ -485,10 +563,10 @@ class PathToken(StringToken):
     FILE = 'file'
     DIRECTORY = 'directory'
 
-    def __init__(self, name, pathtype=ANY):
+    def __init__(self, name, pathtype=ANY, cli=None, helpstring=None):
         self._pathtype = pathtype
         self._is_windows = None
-        super().__init__(name)
+        super().__init__(name, cli=cli, helpstring=helpstring)
 
     def get_drives(self):
         drives = []
@@ -526,9 +604,6 @@ class PathToken(StringToken):
             path_sep = "/"
         return "A {}.".format(self._pathtype) + ' Start the input with quote (") and use {} as separator'.format(path_sep)
 
-    def complete(self, str_input):
-        return TOO_MANY_COMPLETIONS, []
-
     def children(self, path):
         try:
             content = os.listdir(path)
@@ -541,16 +616,16 @@ class PathToken(StringToken):
             print("\nPermissionError on {}\n".format(path))
             return []
 
-    def get_value(self, str_input):
-        m, n, l, _ = self.lookup(str_input)
+    async def get_value(self, str_input, cli=None): # noqa
+        _m, n, l, _ = await self.lookup(str_input) # noqa
         if n == 0:
-            return None
+            return NullTokenValue
         elif n == 1:
             return l[0].path_string
         else:
             return str_input
 
-    def complete(self, str_input):
+    async def complete(self, str_input, cli=None): # noqa
         if str_input == "":
             return TOO_MANY_COMPLETIONS, []
         elif str_input == '"':
@@ -568,7 +643,7 @@ class PathToken(StringToken):
                 path_complete = True
             else:
                 path_complete = False
-            m, n, l, path_sep = self.lookup(str_input)
+            m, n, l, path_sep = await self.lookup(str_input)
 
             if not path_complete:
                 for elem in l.copy():
@@ -594,13 +669,13 @@ class PathToken(StringToken):
 
             return n, ['"' + str(elem.path_string) + ('"' if path_complete else "") for elem in l]
 
-    def match(self, str_input):
+    async def match(self, str_input, cli=None): # noqa
 
         if str_input.startswith('"') and str_input.endswith('"') and len(str_input) > 1:
             path_complete = True
         else:
             path_complete = False
-        m, n, l, _ = self.lookup(str_input)
+        m, _n, l, _ = await self.lookup(str_input) # noqa
         if m == MATCH_PARTIAL and len(l) == 1:
             if path_complete:
                 return MATCH_SUCCESS
@@ -608,7 +683,7 @@ class PathToken(StringToken):
                 return MATCH_SUCCESS
         return m
 
-    def lookup(self, str_input):
+    async def lookup(self, str_input):
         path_complete = False
         if str_input == "":
             return MATCH_PARTIAL, TOO_MANY_COMPLETIONS, [], os.path.pathsep
