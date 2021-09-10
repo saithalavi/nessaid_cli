@@ -40,38 +40,48 @@ class CustomSubstringToken(CliToken):
 
     async def get_options(self, cli, s): # noqa
         matched_values = cli.get_matched_values() # This will fetch the matched tokens it will be: 'token-test' <EXAMPLE_9_PARENT_STRING>
-        parent_string = matched_values[self._parent_index]
-
-        # Parent tring will be converted to Python format, to strip quotes and replace with escape characters
+        parent_strings = matched_values[self._parent_index].split(",")
+        python_strings = []
+        # Parent strings needs to be converted to Python format, ie to strip quotes and replace escape characters
         # '"as df"' will be converted to 'as df', 'a\\n' will be converted to 'a\n'
-        python_string = convert_to_python_string(parent_string)
+        # and if geuine quotes are there do precautions to preserve them.
+        # CLI framework hopefully takes care of it for CLI read strings, since we are splitting it here,
+        # we should take care of them here
+        for s in parent_strings:
+            if s.startswith('\\"'):
+                s = '"' + s
+            if s.endswith('\\"'):
+                s += '"'
+            python_strings.append(convert_to_python_string(s))
 
         # Now convert the substrings back to CLI format for presenting in CLI
-        return [
-            convert_to_cli_string(s.strip()) for s in python_string.split(",")
+        substrings = [
+            convert_to_cli_string(s) for s in python_strings
         ]
+        return substrings
 
-    async def complete(self, s, cli):
-        options = await self.get_options(cli, s)
+    async def complete(self, input_str, cli):
+        options = await self.get_options(cli, input_str)
+
         # The complete function should return a tuple (n, l) where n is the number of completions and l is the list of completions
         # if argument s is empty, all options will be returned.
         # It can also return (TOO_MANY_COMPLETIONS, []) if n is very large so that the CLI wont clutter, the completion size will come down
         # as the user types and limited options can be printed as suggestions
-        return await CliToken.complete_from_multiple(options, s, cli)
+        return await CliToken.complete_from_multiple(options, input_str, cli)
 
-    async def match(self, s, cli):
+    async def match(self, input_str, cli):
         # match should return either of [MATCH_SUCCESS, MATCH_FAILURE, MATCH_PARTIAL]
-        options = await self.get_options(cli, s)
-        return await CliToken.match_from_multiple(options, s, cli)
+        options = await self.get_options(cli, input_str)
+        return await CliToken.match_from_multiple(options, input_str, cli)
 
     async def get_value(self, match_string=None, cli=None):
         try:
             n, comp = await self.complete(match_string, cli=cli)
             if n == 1:
-                return comp[0]
+                return convert_to_python_string(comp[0])
             elif n > 1:
                 if match_string in comp:
-                    return match_string
+                    return convert_to_python_string(match_string)
         except:
             pass
         return NullTokenValue
@@ -465,6 +475,7 @@ class SimpleCli(NessaidCmd):
 """
 Example 9 CLI interaction
 =========================
+# Some completions might vary slightly as there was fixes in quotes handling
 
 simple-cli #
 simple-cli # to<TAB>
@@ -483,12 +494,12 @@ simple-cli # to asdf a<ENTER>
 parent_string: asdf
 sub_string: asdf
 simple-cli #
-simple-cli # token "asdf, 123, asdf 123, 1 2 3"<TAB>
+simple-cli # token "asdf, 123, asdf 123, 1 2 3"
 
-"1 2 3"    :    A substring of the parent string
-"asdf 123" :    A substring of the parent string
-123        :    A substring of the parent string
-asdf       :    A substring of the parent string
+" 1 2 3"    :    A substring of the parent string
+" 123"      :    A substring of the parent string
+" asdf 123" :    A substring of the parent string
+asdf        :    A substring of the parent string
 
 simple-cli # token "asdf, 123, asdf 123, 1 2 3" 1<ENTER>
 parent_string: asdf, 123, asdf 123, 1 2 3
@@ -498,8 +509,9 @@ parent_string: asdf, 123, asdf 123, 1 2 3
 sub_string: asdf
 simple-cli # token "asdf, 123, asdf 123, 1 2 3" "<TAB>
 
-"1 2 3"    :    A substring of the parent string
-"asdf 123" :    A substring of the parent string
+" 1 2 3"    :    A substring of the parent string
+" 123"      :    A substring of the parent string
+" asdf 123" :    A substring of the parent string
 
 simple-cli # token "asdf, 123, asdf 123, 1 2 3" "1<ENTER>
 parent_string: asdf, 123, asdf 123, 1 2 3
@@ -559,6 +571,19 @@ parent_string: asdf
 ,123 123,a      b
 sub_string: "a  b"
 simple-cli #
+simple-cli # to "asdf, 123 123, \"asdf\"\""
+
+" 123 123"    :    A substring of the parent string
+" \"asdf\"\"" :    A substring of the parent string
+asdf          :    A substring of the parent string
+
+simple-cli # to "asdf, 123 123, \"asdf\"\"" " \<TAB><TAB>
+
+" \"asdf\"\"" :    A substring of the parent string
+
+simple-cli # to "asdf, 123 123, \"asdf\"\"" " \"asdf\"\""<ENTER>
+parent_string: asdf, 123 123, "asdf""
+sub_string:  "asdf""
 """
 
 
