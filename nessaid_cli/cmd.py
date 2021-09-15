@@ -114,7 +114,7 @@ class NessaidCmd(NessaidCli):
 
         self.execute_line = self.exec_line
         self.execute_args = self.exec_args
-        if self._use_base_grammar:
+        if self._use_base_grammar and type(self) != NessaidCmd:
             grammar_text = NessaidCmd.__doc__
         else:
             grammar_text = ""
