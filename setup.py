@@ -8,10 +8,9 @@
 import os
 import sys
 import shutil
-from pathlib import Path
 from setuptools import setup
 
-VERSION = "3.0.0"
+VERSION = "3.0.1"
 
 pkg_name = 'nessaid_cli'
 test_pkg_name = 'nessaid_cli_tests'
@@ -23,13 +22,15 @@ clanup_dirs = ['build', 'dist', '.pytest_cache', pkg_name + '.egg-info']
 
 
 def rm_pycache(directory):
-    directory = Path(directory)
-    for item in directory.iterdir():
-        if str(item.parts[-1]) == '__pycache__':
-            print("removing dir:", str(item))
-            shutil.rmtree(item)
-        elif item.is_dir():
-            rm_pycache(item)
+    dir_content = os.listdir(directory)
+    for item in dir_content:
+        cdir = os.path.join(directory, item)
+        if os.path.isdir(cdir):
+            if item == '__pycache__':
+                print("removing dir:", cdir)
+                shutil.rmtree(cdir)
+            else:
+                rm_pycache(cdir)
 
 
 def do_cleanup_fixes():
@@ -80,35 +81,37 @@ install_requires = [
     "nessaid_readline",
 ]
 
-setup(
-    name=pkg_name,
-    version=VERSION,
-    url='https://github.com/saithalavi/nessaid_cli',
-    description="Nessaid's CLI tools",
-    long_description=long_description,
-    author='Saithalavi M',
-    author_email='saithalavi@gmail.com',
-    packages=install_packages,
-    include_package_data=True,
-    install_requires=install_requires,
-    python_requires='>=3',
-    keywords='cli parser cli-builder',
-    license='MIT',
-    classifiers=[
-        'Development Status :: 4 - Beta',
-        'Intended Audience :: Developers',
-        'Topic :: Software Development :: Libraries :: Application Frameworks',
-        'Programming Language :: Python :: 3',
-        'License :: OSI Approved :: MIT License',
-    ],
-    project_urls = {
-        'Documentation': 'https://github.com/saithalavi/nessaid_cli/blob/master/README.md',
-        'Source': 'https://github.com/saithalavi/nessaid_cli',
-        'Tracker': 'https://github.com/saithalavi/nessaid_cli/issues',
-    },
-    test_suite="nessaid_cli_tests",
-)
 
 if __name__ == '__main__':
+
+    setup(
+        name=pkg_name,
+        version=VERSION,
+        url='https://github.com/saithalavi/nessaid_cli',
+        description="Nessaid's CLI tools",
+        long_description=long_description,
+        author='Saithalavi M',
+        author_email='saithalavi@gmail.com',
+        packages=install_packages,
+        include_package_data=True,
+        install_requires=install_requires,
+        python_requires='>=3',
+        keywords='cli parser cli-builder',
+        license='MIT',
+        classifiers=[
+            'Development Status :: 4 - Beta',
+            'Intended Audience :: Developers',
+            'Topic :: Software Development :: Libraries :: Application Frameworks',
+            'Programming Language :: Python :: 3',
+            'License :: OSI Approved :: MIT License',
+        ],
+        project_urls = {
+            'Documentation': 'https://github.com/saithalavi/nessaid_cli/blob/master/README.md',
+            'Source': 'https://github.com/saithalavi/nessaid_cli',
+            'Tracker': 'https://github.com/saithalavi/nessaid_cli/issues',
+        },
+        test_suite="nessaid_cli_tests",
+    )
+
     if 'clean' in sys.argv and 'install' not in sys.argv:
         do_cleanup_fixes()
