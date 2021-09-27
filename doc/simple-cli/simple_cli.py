@@ -433,9 +433,10 @@ class SimpleCli(NessaidCmd):
         >>
         """
         if async_inp:
-            inp = await self.get_input("python: ", show_char=show_char)
+            inp = await self.input("python: ", show_char=show_char)
         else:
-            inp = self.input("python: ", show_char=show_char)
+            self.print("non async input is deprecated.")
+            inp = await self.input("python: ", show_char=show_char)
         print("Cli Code Input (python print):", input_str)
         print("Python Code Input:", inp)
 

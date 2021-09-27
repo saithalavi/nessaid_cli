@@ -3,10 +3,16 @@
 # inline comments in router_cli_with_inline_comments.py in same folder.
 # Follow Step 1: to Step 23:  in that file.
 
+import os
+import asyncio
+import argparse
+
 from nessaid_cli.cmd import NessaidCmd
 from nessaid_cli.tokens import (
     CliToken, StringToken, RangedStringToken, MATCH_SUCCESS, MATCH_PARTIAL, NullTokenValue
 )
+
+from nessaid_readline.readkey import readkey
 
 import ipaddress
 
@@ -165,6 +171,9 @@ class ConfigInterfaceCmd(NessaidCmd):
         """
         self.exit_loop()
 
+    async def handle_eof(self):
+        self.exit_loop()
+
     async def do_discard(self):
         r"""
         "discard": "Exit from the interface discarding current configuration"
@@ -223,6 +232,9 @@ class ConfigCmd(NessaidCmd):
             InterfaceToken,
             ExistingInterfaceIpAddressToken,
         ]
+
+    async def handle_eof(self):
+        self.exit_loop()
 
     async def get_interface_names(self):
         return await self.parent.get_interface_names()
@@ -286,6 +298,7 @@ class ExecCmd(NessaidCmd):
     r"""
 
     token INTERFACE InterfaceToken();
+    token CONFIG_FILE StringToken();
 
     SHOW_CLI[$section, $interface, $verbose]:
         (
@@ -323,8 +336,11 @@ class ExecCmd(NessaidCmd):
 
     def get_token_classes(self):
         return [
-            InterfaceToken,
+            InterfaceToken, StringToken
         ]
+
+    async def handle_eof(self):
+        self.exit_loop()
 
     async def get_interface_names(self):
         return list(self._interfaces.keys())
@@ -406,16 +422,27 @@ class ExecCmd(NessaidCmd):
             elif verbose:
                 print(f"    Details    : No details to show", file=self.stdout)
 
-    async def do_config(self):
+    async def do_config(self, filename):
         r"""
         "configure": "Configure the box"
+        {
+            CONFIG_FILE : "Configuration file"
+            << $filename = $1; >>
+        }
         """
-        await self.enter_context(
-            ConfigCmd,
-            use_parent_grammar=False,
-            prompt="nessaid-router-box: (config) # ",
-            match_parent_grammar=False, disable_default_hooks=True
-        )
+
+        if filename:
+            if os.path.isfile(filename):
+                self.add_file_to_execute(filename)
+            else:
+                self.error("Invalid file")
+        else:
+            await self.enter_context(
+                ConfigCmd,
+                use_parent_grammar=False,
+                prompt="nessaid-router-box: (config) # ",
+                match_parent_grammar=False, disable_default_hooks=True
+            )
 
 
 class LoginPrompt(NessaidCmd):
@@ -455,11 +482,11 @@ class LoginPrompt(NessaidCmd):
                 return
 
     async def login(self):
-        username = self.input("Username: ")
+        username = await self.input("Username: ")
         if not await self.validate_username(username):
             print("Invalid username.", file=self.stdout)
             return False
-        password = self.input("Password: ", show_char=False)
+        password = await self.input("Password: ", show_char=False)
         if not await self.validate_password(username, password):
             print("Invalid password.", file=self.stdout)
             return False
@@ -475,4 +502,15 @@ class LoginPrompt(NessaidCmd):
 
 if __name__ == '__main__':
     intro = "\n" * 3 + "Welcome to nessaid-cli router-box" + "\n" * 2 + "Plese login" + "\n" * 2
-    LoginPrompt(prompt="nessaid-router-box (Not logged in) # ", disable_default_hooks=True).run(intro=intro)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--file', default=None)
+    args = parser.parse_args()
+
+    try:
+        LoginPrompt(
+            prompt="nessaid-router-box (Not logged in) # ",
+            disable_default_hooks=True
+        ).run(intro=intro, filename=args.file)
+    except Exception as e:
+        print("Exception in CLI:", type(e), e)
+    readkey()

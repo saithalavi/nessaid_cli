@@ -1,3 +1,16 @@
+Version 4.0.0:
+
+    Removed support for system/external readline modules
+    Made the readline module async mode
+    Removed non async input
+    Miscellaneous fixes
+    Better handling of CTRL+C and CTRL+D By default ignored. Need to override handle_eof and handle_keyboard_interrupt
+        To exit on these call self.exit_loop() in the overriden methods
+        Windows CTRL+C is trapped in outermost run_until_complete call and it is fed toi the CLI to process
+    Configuration file support: Commands can be executed from file. The NessaidCmd.run method accepts a filename parameter
+        Also the router CLI has implementation example of running file content as part of CLI execution
+        The config command now accepts a filname and runs the commands in the file
+
 Version 3.0.0:
 
     Implemented Orderless set grammar.

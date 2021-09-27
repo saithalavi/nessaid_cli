@@ -130,10 +130,9 @@ class CmdTest1(unittest.TestCase):
                 [""]
             ),
         ]
-        loop = asyncio.get_event_loop()
         for inp, out, err in input_output_err:
             with captured_output() as (stdout, stderr):
-                loop.run_until_complete(Cmd1.execute_args(*inp))
+                Cmd1.execute_args(*inp)
             stdout = stdout.getvalue().strip().split("\n")
             stderr = stderr.getvalue().strip().split("\n")
 

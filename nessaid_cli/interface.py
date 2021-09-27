@@ -377,9 +377,15 @@ class CliInterface(StdStreamsHolder):
         self._str_cache_size = str_cache_size
         self._token_value_cache_size = token_value_cache_size
 
+        self._executing = False
+
     @property
     def loop(self):
         return self._loop
+
+    @property
+    def executing(self):
+        return self._executing
 
     @property
     def current_grammar(self):
@@ -537,13 +543,13 @@ class CliInterface(StdStreamsHolder):
                 if len(args) > 1:
                     show_char = args[1]
             try:
-                return await self.get_input(prompt, show_char)
+                return await self.input(prompt, show_char)
             except:
                 return ""
 
         return None
 
-    async def get_input(self, prompt, show_char):
+    async def input(self, prompt, show_char):
         raise NotImplementedError
 
     async def execute_binding_call(self, func_name: str, local_function: bool, *args, **kwarg):
@@ -609,7 +615,10 @@ class CliInterface(StdStreamsHolder):
                     else:
                         position = element.position + 1
                         while position < parent.child_count:
-                            _next.append(parent.get(position))
+                            _c = parent.get(position)
+                            _next.append(_c)
+                            if _c.mandatory or parent.element.repeat_count > 1:
+                                break
                             position += 1
 
                     if _next:
@@ -881,7 +890,11 @@ class CliInterface(StdStreamsHolder):
                                     self._matched_values.append(match_value)
                                     tok_index += 1
                                 res.matched_values = match_values
-                                root_arglist = await self.execute_success_sequence(matching_sequences[0], match_values, args)
+                                try:
+                                    self._executing = True
+                                    root_arglist = await self.execute_success_sequence(matching_sequences[0], match_values, args)
+                                finally:
+                                    self._executing = False
                                 arglen = len(arglist)
                                 for i in range(arglen):
                                     arglist[i] = root_arglist.pop(0)

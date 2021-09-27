@@ -31,7 +31,7 @@ class TestCmd(NessaidCmd):
             print("Cli Code Input (cli print):", $input_str);
         >>
         """
-        inp = self.input("python: ", show_char=False)
+        inp = await self.input("python: ", show_char=False)
         print("Cli Code Input (python print):", input_str)
         print("Python Code Input:", inp)
 
@@ -43,7 +43,7 @@ class TestCmd(NessaidCmd):
             print("Cli Code Input (cli print):", $input_str);
         >>
         """
-        inp = await self.get_input("python: ", show_char=True)
+        inp = await self.input("python: ", show_char=True)
         print("Cli Code Input (python print):", input_str)
         print("Python Code Input:", inp)
 

@@ -118,9 +118,9 @@ class StdStreamsHolder():
     def stderr(self):
         return self._stderr if self._stderr is not None else sys.stderr
 
-    def print(self, *args):
-        print(*args, file=self.stdout)
+    def print(self, *args, **kwargs):
+        print(*args, file=self.stdout, **kwargs)
 
-    def error(self, *args):
-        print(*args, file=self.stderr)
+    def error(self, *args, **kwargs):
+        print(*args, file=self.stderr, **kwargs)
 

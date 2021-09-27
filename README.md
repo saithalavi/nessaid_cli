@@ -776,8 +776,35 @@ basic token types with auto completion and how to define new token classes
 A working example of a minimal router-box CLI is in the doc directory. This include sub cli contexts which are used to configure
 a sub section of our configuration.
 
+## Running from OS command line
+
+Once we define our command grammar in Cmd, we can invoke those commands by passing the arguments to the python executable
+Basic usage is like
+
+```python
+# file cmd_class.py
+
+class CmdClass(NessaidCmd):
+    # Class definition
+
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        args = sys.argv[1:]
+        sys.exit(CmdClass.execute_args(*args))
+        # or sys.exit(CommandLineCmd().exec_args(*args))
+```
+
+where CmdClass is a proper Cmd implementation with commands. If CmdClass has a command 'command1' which accepts <args>, it can be run from
+CLI like
+
+```bash
+python[3] cmd_class.py command1 <args>
+```
+
+Check the examples in examples/command_line_args_test.py code and follow up CLI output
+
 ## TODO
-* Add support for non interactive processing, including processing a file content
 * Support for importing other grammar files. The parser supports import statements but processing is not there.
 * Add some kind of privilege states for tokens so that tokens will be matched only if the privilege level of the CLI instance is higher than that of the token.
 * Compiler to generate a json or similar format for compiled grammar so that it can be loaded to CLI processors. Now the python parsed tree is used. If we can convert between json and the parse tree, I think it will be good to use across different languages as implementation of the compiler might be tedious in all languages.

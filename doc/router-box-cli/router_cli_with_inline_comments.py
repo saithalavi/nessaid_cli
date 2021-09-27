@@ -484,11 +484,11 @@ class LoginPrompt(NessaidCmd):
         pass
 
     async def login(self):
-        username = self.input("Username: ")
+        username = await self.input("Username: ")
         if not await self.validate_username(username):
             print("Invalid username.", file=self.stdout)
             return False
-        password = self.input("Password: ", show_char=False)
+        password = await self.input("Password: ", show_char=False)
         if not await self.validate_password(username, password):
             print("Invalid password.", file=self.stdout)
             return False

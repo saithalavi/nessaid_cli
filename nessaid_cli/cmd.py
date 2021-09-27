@@ -20,8 +20,8 @@ import tracemalloc
 from datetime import datetime
 
 from nessaid_cli.compiler import compile_grammar
-from nessaid_cli.cli import NessaidCli, ChildCliExitException
-from nessaid_cli.tokens import RangedIntToken, MATCH_SUCCESS, MATCH_FAILURE, MATCH_PARTIAL, MATCH_AMBIGUOUS
+from nessaid_cli.cli import NessaidCli, ChildCliExitException, CliAlreadyRunning
+from nessaid_cli.tokens import RangedIntToken, StringToken, MATCH_SUCCESS, MATCH_FAILURE, MATCH_PARTIAL, MATCH_AMBIGUOUS
 
 
 class NessaidCmd(NessaidCli):
@@ -38,7 +38,7 @@ class NessaidCmd(NessaidCli):
     """
 
     def get_token_classes(self):
-        return [RangedIntToken]
+        return [RangedIntToken, StringToken]
 
     def generate_grammar_name(self, hookmethod):
         """Generate the grammar name used in the grammar
@@ -71,6 +71,16 @@ class NessaidCmd(NessaidCli):
             formatted = textwrap.dedent(grammar_text)
         return formatted
 
+    async def _dummy_hook(self, dummy_list):
+        r"""
+        << $dummy_list = list(); >>
+        (
+            DUMMY_TOKEN
+            << append($dummy_list, $1); >>
+        ) * (1: 10000)
+        """
+        self.print(" ".join(dummy_list))
+
     def __init__(self, loop=None, parent=None, prompt=None, cli_hook_prefix="do_", cli_nargs=3,
                  stdin=None, stdout=None, stderr=None, enable_bell=False, do_tracemalloc=False,
                  disable_default_hooks=False, use_base_grammar=True, use_parent_grammar=True, completekey='tab',
@@ -96,6 +106,7 @@ class NessaidCmd(NessaidCli):
         self._stdout = stdout
         self._stderr = stderr
         self._parent = parent
+        self._loop_task = None
         self._last_tracemalloc_snapshot = None
 
         self._enable_timing = False
@@ -111,6 +122,7 @@ class NessaidCmd(NessaidCli):
             self.do__exit = None
             self.do__timing = None
             self.do__profile = None
+            self.do__system_info = None
 
         self.execute_line = self.exec_line
         self.execute_args = self.exec_args
@@ -121,6 +133,10 @@ class NessaidCmd(NessaidCli):
         grammar_text += self.global_grammar
         grammar_hooks = [getattr(self, f) for f in dir(self) if f.startswith(cli_hook_prefix) and callable(getattr(self, f))]
         grammar_alternatives = []
+
+        if not grammar_hooks or all(not h.__doc__ for h in grammar_hooks):
+            grammar_hooks = [self._dummy_hook]
+            grammar_text += "\n\n" + "token DUMMY_TOKEN StringToken();\n\n"
 
         for hook in grammar_hooks:
             if hook.__doc__:
@@ -147,25 +163,25 @@ class NessaidCmd(NessaidCli):
 
                 grammar_text += hook_grammar
 
-        if grammar_alternatives:
-            root_grammar_name = self.generate_root_grammar_name()
-            root_grammar = "\n\n    {grammar_name}[{argstring}]:\n".format(grammar_name=root_grammar_name, argstring=argstring)
-            root_grammar += "      " + "\n      |\n      ".join(grammar_alternatives)
-            root_grammar += "\n      ;\n"
+        root_grammar_name = self.generate_root_grammar_name()
 
-            grammar_text += root_grammar
-            grammar_text = self.format_grammar(grammar_text)
+        root_grammar = "\n\n    {grammar_name}[{argstring}]:\n".format(grammar_name=root_grammar_name, argstring=argstring)
+        root_grammar += "      " + "\n      |\n      ".join(grammar_alternatives)
+        root_grammar += "\n      ;\n"
 
-            if show_grammar:
-                self.print("# Generated CLI grammar:")
-                self.print(grammar_text)
+        grammar_text += root_grammar
+        grammar_text = self.format_grammar(grammar_text)
 
-            grammar_set = compile_grammar(grammar_text)
-            super().__init__(
-                grammar_set, prompt=prompt, parent=parent, loop=loop, enable_bell=enable_bell,
-                stdin=stdin, stdout=stdout, stderr=stderr,
-                completekey=completekey, use_rawinput=use_rawinput, str_cache_size=str_cache_size
-            )
+        if show_grammar:
+            self.print("# Generated CLI grammar:")
+            self.print(grammar_text)
+
+        grammar_set = compile_grammar(grammar_text)
+        super().__init__(
+            grammar_set, prompt=prompt, parent=parent, loop=loop, enable_bell=enable_bell,
+            stdin=stdin, stdout=stdout, stderr=stderr,
+            completekey=completekey, use_rawinput=use_rawinput, str_cache_size=str_cache_size
+        )
 
     @property
     def global_grammar(self):
@@ -255,17 +271,23 @@ class NessaidCmd(NessaidCli):
         """
         self.exit_loop()
 
-    async def cmdloop(self, intro=None):
+    async def cmdloop(self, intro=None, input_fd=None, close_file=False):
         """Runs the cmd loop until exit
 
         :returns: None
         :rtype: None
         """
 
-        return await super().cmdloop(grammarname=self.generate_root_grammar_name(), intro=intro)
+        try:
+            return await super().cmdloop(
+                grammarname=self.generate_root_grammar_name(),
+                intro=intro, input_fd=input_fd, close_file=close_file
+            )
+        finally:
+            self._loop_task = None
 
-    async def context_loop(self):
-        return await super().cmdloop(grammarname=self.generate_root_grammar_name())
+    async def context_loop(self, input_fd=None):
+        return await super().cmdloop(grammarname=self.generate_root_grammar_name(), input_fd=input_fd)
 
     async def enter_context(self, cmd_class, prompt="", use_parent_grammar=False,
                             match_parent_grammar=False, disable_default_hooks=True, **kwargs):
@@ -286,24 +308,54 @@ class NessaidCmd(NessaidCli):
             match_parent_grammar=match_parent_grammar, **kwargs
         )
 
-    def run(self, intro=None):
+    def run(self, intro=None, filename=None):
+        if self.running:
+            raise CliAlreadyRunning("Cli is running")
+
+        input_fd = None
+        close_file = False
+
+        if filename:
+            if os.path.isfile(filename):
+                try:
+                    input_fd = open(filename)
+                    close_file = True
+                except Exception as e:
+                    self.error(f"Exception opening file: {filename} Error: {str(e)}")
+            else:
+                self.error(f"Invalid file: {filename}")
+
+        self.running = True
         loop = self.loop or asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(self.cmdloop(intro=intro))
-        else:
-            loop.run_until_complete(self.cmdloop(intro=intro))
+        self._loop_task = loop.create_task(self.cmdloop(intro=intro, input_fd=input_fd, close_file=close_file))
+
+        if not loop.is_running():
+            mon_task = self.loop.create_task(self.monitor_loop())
+            while self.running:
+                try:
+                    loop.run_until_complete(mon_task)
+                    time.sleep(.1)
+                    break
+                except KeyboardInterrupt:
+                    while True:
+                        try:
+                            self.handle_external_keyboard_interrupt()
+                        except KeyboardInterrupt:
+                            continue
+                        else:
+                            break
 
     @classmethod
-    async def execute_args(cls, *args):
-        cmd = cls(prompt="# ", show_grammar=False)
-        return await cmd.exec_args(*args)
+    def execute_args(cls, *args):
+        cmd = cls(prompt="# ", show_grammar=False, disable_default_hooks=True, use_base_grammar=False)
+        return cmd.exec_args(*args)
 
     @classmethod
     async def execute_line(cls, line):
         cmd = cls(prompt="# ", show_grammar=False)
         return await cmd.exec_line(line)
 
-    async def exec_args(self, *args):
+    def exec_args(self, *args):
         modified_args = []
         chars_to_check = [" "]
         for arg in args:
@@ -321,8 +373,38 @@ class NessaidCmd(NessaidCli):
 
         args = modified_args
         line = " ".join(args)
-        return await self.exec_line(line)
+        return self.loop.run_until_complete(self.exec_line(line))
 
+    @property
+    def top_cli(self):
+        if self._cli_stack:
+            return self._cli_stack[-1]
+        return self
+
+    async def exec_file(self, filename):
+        line = None
+        try:
+            with open(filename) as fd:
+                line = fd.readline()
+        except Exception as e:
+            self.error(f"Exception opening file: {filename} Error: {str(e)}")
+
+        input_fd = None
+        close_file = False
+
+        if line:
+            if self.executing:
+                self.add_file_to_execute(filename)
+                return
+
+            if self.top_cli._loop_task:
+                self.top_cli.exit_loop()
+                if self.top_cli._loop_task:
+                    await self.top_cli._loop_task
+
+            input_fd = open(filename)
+            close_file = True
+        await self.top_cli.cmdloop(input_fd=input_fd, close_file=close_file)
 
     async def exec_line(self, line):
         try:
@@ -337,13 +419,12 @@ class NessaidCmd(NessaidCli):
             return 2
         try:
             await self.cli_exec_init()
-            await super().exec_line(line)
+            return await super().exec_line(line)
         except Exception as e:
             self.error("Exception executing grammar:", grammar, "input:", line, "Error:", e)
             return 3
         finally:
             self.exit_grammar()
-        return 0
 
     async def _match(self, tok_list, dry_run=False, last_token_complete=False, arglist=None):
 

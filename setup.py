@@ -10,7 +10,7 @@ import sys
 import shutil
 from setuptools import setup
 
-VERSION = "3.0.2"
+VERSION = "4.0.0"
 
 pkg_name = 'nessaid_cli'
 test_pkg_name = 'nessaid_cli_tests'
@@ -78,7 +78,7 @@ NessaidCmd is the stripped down version as an alternative for the default Cmd im
 install_requires = [
     "asyncio",
     "ply",
-    "nessaid_readline",
+    "nessaid_readline>=0.4.0",
 ]
 
 
