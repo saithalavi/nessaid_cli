@@ -82,7 +82,7 @@ class NessaidCmd(NessaidCli):
         self.print(" ".join(dummy_list))
 
     def __init__(self, loop=None, parent=None, prompt=None, cli_hook_prefix="do_", cli_nargs=3,
-                 stdin=None, stdout=None, stderr=None, enable_bell=False, do_tracemalloc=False,
+                 stdin=None, stdout=None, stderr=None, enable_bell=False, do_tracemalloc=False, filename=None,
                  disable_default_hooks=False, use_base_grammar=True, use_parent_grammar=True, completekey='tab',
                  use_rawinput=True, show_grammar=False, str_cache_size=128, match_parent_grammar=False):
         """Creates a Cmd instance
@@ -179,7 +179,7 @@ class NessaidCmd(NessaidCli):
         grammar_set = compile_grammar(grammar_text)
         super().__init__(
             grammar_set, prompt=prompt, parent=parent, loop=loop, enable_bell=enable_bell,
-            stdin=stdin, stdout=stdout, stderr=stderr,
+            stdin=stdin, stdout=stdout, stderr=stderr, filename=filename,
             completekey=completekey, use_rawinput=use_rawinput, str_cache_size=str_cache_size
         )
 
@@ -271,7 +271,7 @@ class NessaidCmd(NessaidCli):
         """
         self.exit_loop()
 
-    async def cmdloop(self, intro=None, input_fd=None, close_file=False):
+    async def cmdloop(self, intro=None):
         """Runs the cmd loop until exit
 
         :returns: None
@@ -281,13 +281,20 @@ class NessaidCmd(NessaidCli):
         try:
             return await super().cmdloop(
                 grammarname=self.generate_root_grammar_name(),
-                intro=intro, input_fd=input_fd, close_file=close_file
+                intro=intro
             )
         finally:
             self._loop_task = None
 
-    async def context_loop(self, input_fd=None):
-        return await super().cmdloop(grammarname=self.generate_root_grammar_name(), input_fd=input_fd)
+    async def context_loop(self):
+        try:
+            return await super().cmdloop(grammarname=self.generate_root_grammar_name())
+        finally:
+            if self.parent_backup:
+                try:
+                    await self.parent_backup.restore()
+                except:
+                    pass
 
     async def enter_context(self, cmd_class, prompt="", use_parent_grammar=False,
                             match_parent_grammar=False, disable_default_hooks=True, **kwargs):
@@ -308,26 +315,13 @@ class NessaidCmd(NessaidCli):
             match_parent_grammar=match_parent_grammar, **kwargs
         )
 
-    def run(self, intro=None, filename=None):
+    def run(self, intro=None):
         if self.running:
             raise CliAlreadyRunning("Cli is running")
 
-        input_fd = None
-        close_file = False
-
-        if filename:
-            if os.path.isfile(filename):
-                try:
-                    input_fd = open(filename)
-                    close_file = True
-                except Exception as e:
-                    self.error(f"Exception opening file: {filename} Error: {str(e)}")
-            else:
-                self.error(f"Invalid file: {filename}")
-
         self.running = True
         loop = self.loop or asyncio.get_event_loop()
-        self._loop_task = loop.create_task(self.cmdloop(intro=intro, input_fd=input_fd, close_file=close_file))
+        self._loop_task = loop.create_task(self.cmdloop(intro=intro))
 
         if not loop.is_running():
             mon_task = self.loop.create_task(self.monitor_loop())
@@ -380,31 +374,6 @@ class NessaidCmd(NessaidCli):
         if self._cli_stack:
             return self._cli_stack[-1]
         return self
-
-    async def exec_file(self, filename):
-        line = None
-        try:
-            with open(filename) as fd:
-                line = fd.readline()
-        except Exception as e:
-            self.error(f"Exception opening file: {filename} Error: {str(e)}")
-
-        input_fd = None
-        close_file = False
-
-        if line:
-            if self.executing:
-                self.add_file_to_execute(filename)
-                return
-
-            if self.top_cli._loop_task:
-                self.top_cli.exit_loop()
-                if self.top_cli._loop_task:
-                    await self.top_cli._loop_task
-
-            input_fd = open(filename)
-            close_file = True
-        await self.top_cli.cmdloop(input_fd=input_fd, close_file=close_file)
 
     async def exec_line(self, line):
         try:

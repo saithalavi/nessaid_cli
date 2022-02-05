@@ -1,3 +1,11 @@
+Version 4.1.0:
+
+    Better processing of file inputs
+    Support for forcing selected inputs from stdin
+    Share the same readline stream between parents and children
+    Support for comment line (Starting with #)
+    Support for partial lines (Ending with \)
+
 Version 4.0.0:
 
     Removed support for system/external readline modules

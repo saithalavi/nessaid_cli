@@ -482,11 +482,11 @@ class LoginPrompt(NessaidCmd):
                 return
 
     async def login(self):
-        username = await self.input("Username: ")
+        username = await self.input("Username: ", from_stdin=True)
         if not await self.validate_username(username):
             print("Invalid username.", file=self.stdout)
             return False
-        password = await self.input("Password: ", show_char=False)
+        password = await self.input("Password: ", show_char=False, from_stdin=True)
         if not await self.validate_password(username, password):
             print("Invalid password.", file=self.stdout)
             return False
@@ -509,8 +509,9 @@ if __name__ == '__main__':
     try:
         LoginPrompt(
             prompt="nessaid-router-box (Not logged in) # ",
-            disable_default_hooks=True
-        ).run(intro=intro, filename=args.file)
+            disable_default_hooks=True,
+            filename=args.file
+        ).run(intro=intro)
     except Exception as e:
         print("Exception in CLI:", type(e), e)
     readkey()

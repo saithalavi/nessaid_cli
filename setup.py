@@ -10,7 +10,7 @@ import sys
 import shutil
 from setuptools import setup
 
-VERSION = "4.0.0"
+VERSION = "4.1.0"
 
 pkg_name = 'nessaid_cli'
 test_pkg_name = 'nessaid_cli_tests'

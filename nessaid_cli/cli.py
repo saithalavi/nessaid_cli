@@ -14,6 +14,8 @@ from nessaid_cli.elements import EndOfInpuToken
 from nessaid_cli.interface import CliInterface, TokenCompletion
 from nessaid_cli.tokens import MATCH_SUCCESS, MATCH_PARTIAL, MATCH_AMBIGUOUS
 from nessaid_cli.tokenizer.tokenizer import NessaidCliTokenizer, TokenizerException
+
+import nessaid_readline.key as key
 from nessaid_readline.async_readline import NessaidAsyncReadline, NessaidReadlineEOF, NessaidReadlineKeyboadInterrupt
 
 
@@ -30,14 +32,25 @@ class CliAlreadyRunning(Exception):
     pass
 
 
-class CliFileInputComplete(Exception):
-    pass
+class ParentBackup():
 
+    def __init__(self, cli, readline):
+        self._cli = cli
+        self._parent = cli.parent
+        self._readline = readline
+        self._enable_bell = readline._enable_bell
+
+    async def restore(self):
+        self._readline.set_prepare_history_entry(lambda entry: entry.strip())
+        self._readline.set_history_size(self._parent._history_size)
+        self._readline.enable_bell(self._enable_bell)
+        self._parent._exec_inited = False
+        await self._parent.cli_exec_init()
 
 class NessaidCli(CliInterface):
 
     def __init__(self, grammarset, loop=None, parent=None,
-                 prompt=None, stdin=None, stdout=None, stderr=None,
+                 prompt=None, stdin=None, stdout=None, stderr=None, filename=None,
                  completekey='tab', use_rawinput=True, history_size=100, enable_bell=False, str_cache_size=128):
 
         self._loop = loop if loop else asyncio.get_event_loop()
@@ -47,14 +60,21 @@ class NessaidCli(CliInterface):
 
         enable_bell = False if enable_bell is not True else True
 
-        self._readline = NessaidAsyncReadline(loop=self.loop, stdin=self.stdin, stdout=self.stdout, stderr=self.stderr)
-        self._readline.enable_bell(enable_bell)
         self._history_size = history_size
 
-        self._complete_tokens_processor =  self.process_completion_tokens
-        self._readline.set_prepare_history_entry(lambda entry: entry.strip())
-        self._readline.set_history_size(self._history_size)
+        if not parent:
+            self._readline = NessaidAsyncReadline(loop=self.loop, stdin=self.stdin, stdout=self.stdout, stderr=self.stderr)
+            self._readline.set_prepare_history_entry(lambda entry: entry.strip())
+            self._readline.set_history_size(self._history_size)
+        else:
+            self._parent_backup = ParentBackup(self, parent.readline)
+            self._readline = parent.readline
 
+        self._readline.enable_bell(enable_bell)
+
+        self._complete_tokens_processor =  self.process_completion_tokens
+
+        self._filename = filename
         self._parent = parent
         self._completekey = completekey
         self._use_rawinput = use_rawinput
@@ -76,7 +96,9 @@ class NessaidCli(CliInterface):
             self._cli_stack = parent._cli_stack
         else:
             self._cli_stack = []
-        self._files_to_execute = []
+        self._file_data = []
+        self._partial_line = False
+        self._effective_line = ""
 
     @property
     def loop(self):
@@ -85,6 +107,29 @@ class NessaidCli(CliInterface):
     @property
     def parent(self):
         return self._parent
+
+    @property
+    def parent_backup(self):
+        return self._parent_backup
+
+    @property
+    def file_data(self):
+        if self.parent:
+            return self.parent.file_data
+        return self._file_data
+
+    @property
+    def file_line(self):
+        if self.parent:
+            return self.parent.file_line
+        if self._file_data:
+            file_content = self._file_data[-1]
+            if file_content:
+                file_line = file_content.pop(0)
+                if not file_content:
+                    self._file_data.pop()
+                return file_line
+        return None
 
     @property
     def prompt(self):
@@ -136,27 +181,14 @@ class NessaidCli(CliInterface):
         except Exception as e:
             return False, "Exception parsing line: {}: {}".format(type(e), e)
 
-    async def get_next_line(self, prompt, input_fd=None):
-        if input_fd:
-            while True:
+    async def get_next_line(self, prompt, show_prompt_for_file_lines=True, from_stdin=False):
 
+        line = None if from_stdin else self.file_line
+        if line is not None:
+            if show_prompt_for_file_lines:
                 self.print(prompt, end="")
-
-                line = input_fd.readline()
-
-                if not line:
-                    raise CliFileInputComplete()
-
-                if line[-1] not in ['\n', '\r']:
-                    self.print(line.strip())
-                    return line
-
-                line = line.rstrip()
-                if not line:
-                    self.print("\n", end="")
-                    continue
-                self.print(line.strip())
-                return line
+            self.print(line)
+            return line
 
         try:
             line = await self.readline.readline(prompt)
@@ -169,6 +201,20 @@ class NessaidCli(CliInterface):
 
         if self._waiting_input:
             await self._readline.insert_text("\t")
+            return None
+
+        if self._partial_line:
+
+            line = self._readline.get_line_buffer()
+            current_line = self._effective_line or ""
+            current_line += line
+
+            while self._readline.get_line_buffer():
+                await self._readline.insert_text(key.BACKSPACE)
+            await self._readline.insert_text(current_line)
+            self._partial_line = False
+            self._effective_line = ""
+            self._readline._input_prompt = self.prompt
             return None
 
         TOKEN_SEPARATORS = [" "]
@@ -335,10 +381,19 @@ class NessaidCli(CliInterface):
     def set_completion_tokens(self, tokens):
         self._completion_matches = self._complete_tokens_processor(tokens)
 
-    async def input(self, prompt="", show_char=True):
+    async def input(self, prompt="", show_char=True, show_prompt_for_file_lines=True, from_stdin=False):
 
         try:
             self._waiting_input = True
+            line = None if from_stdin else self.file_line
+            if line is not None:
+                if show_prompt_for_file_lines:
+                    self.print(prompt, end="")
+                if show_char:
+                    self.print(line)
+                else:
+                    self.print("*" * len(line))
+                return line
             return await self._readline.input(prompt, mask_input=not show_char)
         except Exception:
             return ""
@@ -402,9 +457,33 @@ class NessaidCli(CliInterface):
         pass
 
     def add_file_to_execute(self, filename):
-        self._files_to_execute.append(filename)
+        try:
+            with open(filename) as fd:
+                lines = [l.rstrip() for l in fd.readlines()]
+                self.file_data.append(lines)
+        except Exception as e:
+            self.error("Exception processing input file:", filename, type(e), e)
 
-    async def cmdloop(self, grammarname, intro=None, input_fd=None, close_file=False):
+    async def is_partial_line(self, line):
+        try:
+            if line.rstrip().endswith("\\"):
+                return True, line.rstrip()[:-1]
+        except Exception as e:
+            pass
+        return False, line
+
+    async def commented_line(self, line):
+        try:
+            if line.lstrip().startswith("#"):
+                return True
+        except Exception as e:
+            pass
+        return False
+
+    async def cmdloop(self, grammarname, intro=None):
+
+        if self._filename:
+            self.add_file_to_execute(self._filename)
 
         self._running = True
         self._cli_stack.append(self)
@@ -424,7 +503,7 @@ class NessaidCli(CliInterface):
             while self.child_cli:
                 child_cli = self.child_cli
                 try:
-                    await child_cli.context_loop(input_fd=input_fd)
+                    await child_cli.context_loop()
                 except ChildCliExitException as e:
                     match_output = await self.match(
                         e.token_list, dry_run=e.dry_run,
@@ -433,38 +512,40 @@ class NessaidCli(CliInterface):
                 finally:
                     self.child_cli = None
 
+            self._partial_line = False
+            self._effective_line = ""
+
             while not self._exit_loop:
 
-                if not input_fd and self._files_to_execute:
-                    filename = self._files_to_execute.pop(0)
-                    try:
-                        input_fd = open(filename)
-                        close_file = True
-                    except Exception:
-                        pass
-
                 try:
-                    line = await self.get_next_line(self.prompt, input_fd=input_fd)
-                except CliFileInputComplete:
-                    self.print("\n", end="")
-                    try:
-                        if close_file:
-                            close_file = False
-                            input_fd.close()
-                    except Exception:
-                        pass
-                    input_fd = None
-                    continue
+                    if self._partial_line:
+                        line = await self.get_next_line("")
+                    else:
+                        line = await self.get_next_line(self.prompt)
                 except NessaidReadlineKeyboadInterrupt:
                     await self.handle_keyboard_interrupt()
                     continue
                 except NessaidReadlineEOF:
                     await self.handle_eof()
                     continue
-                self._current_line = line
-                #print("Input:", line)
+
+                self._effective_line += line
+                self._partial_line, self._effective_line = await self.is_partial_line(self._effective_line)
+
+                if self._partial_line:
+                    continue
+
+                self._partial_line = False
+
+                if await self.commented_line(self._effective_line):
+                    self._effective_line = ""
+                    continue
+
+                self._current_line = self._effective_line
+                self._effective_line = ""
+
                 try:
-                    success, error, tokens = self.tokenize(line)
+                    success, error, tokens = self.tokenize(self._current_line)
                     if not success:
                         self.error("Failure tokenizing input line:", error)
                 except Exception as e:
@@ -482,10 +563,12 @@ class NessaidCli(CliInterface):
                     self.child_cli = None
                     match_output = await self.match(input_tokens, dry_run=False, last_token_complete=True, arglist=arglist)
 
+                    await self.match(input_tokens, dry_run=False, last_token_complete=True, arglist=arglist)
+
                     while self._child_cli:
                         child_cli = self.child_cli
                         try:
-                            await child_cli.context_loop(input_fd=input_fd)
+                            await child_cli.context_loop()
                             self.child_cli = None
                         except ChildCliExitException as e:
                             self.child_cli = None
