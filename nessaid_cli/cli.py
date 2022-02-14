@@ -563,8 +563,6 @@ class NessaidCli(CliInterface):
                     self.child_cli = None
                     match_output = await self.match(input_tokens, dry_run=False, last_token_complete=True, arglist=arglist)
 
-                    await self.match(input_tokens, dry_run=False, last_token_complete=True, arglist=arglist)
-
                     while self._child_cli:
                         child_cli = self.child_cli
                         try:
