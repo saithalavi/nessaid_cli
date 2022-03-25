@@ -6,7 +6,7 @@ The grammar specification is parsed with PLY python package and the CLI objects 
 
 ## A live demo
 
-![Alt live-demo](https://github.com/saithalavi/nessaid_cli/raw/master/examples/live-demo.gif)
+![Live demo screen capture](https://github.com/saithalavi/static_files/raw/master/nessaid-cli-live-demo.gif)
 
 ## Requirements
 <b>asyncio</b>: The commandline interpreter will be looping for console input in async mode
