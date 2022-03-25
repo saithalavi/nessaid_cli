@@ -4,6 +4,10 @@ This package implements a grammar specification and tools to compile the grammar
 
 The grammar specification is parsed with PLY python package and the CLI objects are implemented on top of readline. The command loop is in async mode.
 
+## A live demo
+
+![Alt live-demo](https://github.com/saithalavi/nessaid_cli/raw/master/examples/live-demo.gif)
+
 ## Requirements
 <b>asyncio</b>: The commandline interpreter will be looping for console input in async mode
 
