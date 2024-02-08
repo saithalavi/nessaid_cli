@@ -130,7 +130,11 @@ class NessaidCmd(NessaidCli):
             grammar_text = NessaidCmd.__doc__
         else:
             grammar_text = ""
+
+        grammar_text += self.base_class_grammar
+
         grammar_text += self.global_grammar
+
         grammar_hooks = [getattr(self, f) for f in dir(self) if f.startswith(cli_hook_prefix) and callable(getattr(self, f))]
         grammar_alternatives = []
 
@@ -190,6 +194,27 @@ class NessaidCmd(NessaidCli):
             grammar += self.parent.global_grammar
         grammar += self.__doc__ if self.__doc__ else ""
         return grammar
+
+
+    @property
+    def base_class_grammar(self):
+        grammar_texts = []
+        base_classes = self.__class__.mro()[1:]
+        while base_classes:
+            base_class = base_classes.pop(0)
+            if NessaidCmd in base_class.mro():
+                if base_class != NessaidCmd:
+                    if base_class.__doc__:
+                        grammar_texts.append(base_class.__doc__)
+                else:
+                    break
+            else:
+                break
+        grammar_texts = reversed(grammar_texts)
+
+        if grammar_texts:
+            return "\n\n".join(grammar_texts)
+        return ""
 
     def do__tracemalloc(self, limit, delta): # noqa
         """
