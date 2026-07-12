@@ -6,9 +6,9 @@
 #
 
 import inspect
-import asyncio
 import unittest
 
+from nessaid_cli.cli import get_or_create_event_loop
 from nessaid_cli.cmd import NessaidCmd
 
 from nessaid_cli.tokens import (
@@ -140,7 +140,7 @@ class CmdTest1(unittest.TestCase):
             assert err == stderr, "\nstderr: Expected: {}\nstderr: Actual  : {}".format(err, stderr)
 
     def do_test_type_positive(self, python_type, cli_prefixes, cli_type, cli_types, type_inputs):
-        loop = asyncio.get_event_loop()
+        loop = get_or_create_event_loop()
         cmd = Cmd1(prompt="# ")
 
         count = 0
@@ -172,7 +172,7 @@ class CmdTest1(unittest.TestCase):
                     assert err == stderr, info + "\nstderr: Expected: {}\nstderr: Actual  : {}".format(err, stderr)
 
     def do_test_type_partial(self, python_type, cli_prefixes, cli_type, cli_types, type_inputs):
-        loop = asyncio.get_event_loop()
+        loop = get_or_create_event_loop()
         cmd = Cmd1(prompt="# ")
         count = 0
 
@@ -203,7 +203,7 @@ class CmdTest1(unittest.TestCase):
                     assert err == stderr, "Failure: stderr mismatch:\n\n" + info + stdout_info + stderr_info
 
     def do_test_type_negative(self, python_type, cli_prefixes, cli_type, cli_types, type_inputs):
-        loop = asyncio.get_event_loop()
+        loop = get_or_create_event_loop()
         cmd = Cmd1(prompt="# ")
         count = 0
 

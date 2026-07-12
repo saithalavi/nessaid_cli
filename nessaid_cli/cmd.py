@@ -20,7 +20,7 @@ import tracemalloc
 from datetime import datetime
 
 from nessaid_cli.compiler import compile_grammar
-from nessaid_cli.cli import NessaidCli, ChildCliExitException, CliAlreadyRunning
+from nessaid_cli.cli import NessaidCli, ChildCliExitException, CliAlreadyRunning, get_or_create_event_loop
 from nessaid_cli.tokens import RangedIntToken, StringToken, MATCH_SUCCESS, MATCH_FAILURE, MATCH_PARTIAL, MATCH_AMBIGUOUS
 
 
@@ -345,7 +345,7 @@ class NessaidCmd(NessaidCli):
             raise CliAlreadyRunning("Cli is running")
 
         self.running = True
-        loop = self.loop or asyncio.get_event_loop()
+        loop = self.loop or get_or_create_event_loop()
         self._loop_task = loop.create_task(self.cmdloop(intro=intro))
 
         if not loop.is_running():

@@ -8,6 +8,7 @@
 import os
 import time
 import asyncio
+import inspect
 import traceback
 
 from nessaid_cli.elements import EndOfInpuToken
@@ -32,6 +33,31 @@ class CliAlreadyRunning(Exception):
     pass
 
 
+def get_or_create_event_loop():
+    """Return a usable event loop for the current thread.
+
+    asyncio.get_event_loop() stopped implicitly creating a loop when none
+    exists (removed in Python 3.14), raising RuntimeError instead. This
+    restores that behavior explicitly: reuse a running loop, fall back to
+    a previously set one, or create and set a new one.
+    """
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
+    try:
+        loop = asyncio.get_event_loop()
+        if not loop.is_closed():
+            return loop
+    except RuntimeError:
+        pass
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop
+
+
 class ParentBackup():
 
     def __init__(self, cli, readline):
@@ -53,7 +79,7 @@ class NessaidCli(CliInterface):
                  prompt=None, stdin=None, stdout=None, stderr=None, filename=None,
                  completekey='tab', use_rawinput=True, history_size=100, enable_bell=False, str_cache_size=128):
 
-        self._loop = loop if loop else asyncio.get_event_loop()
+        self._loop = loop if loop else get_or_create_event_loop()
         self.validate_token_classes()
 
         super().__init__(self._loop, grammarset, stdin=stdin, stdout=stdout, stderr=stderr, str_cache_size=str_cache_size)
@@ -155,8 +181,8 @@ class NessaidCli(CliInterface):
         token_classes = self.get_token_classes()
         for cls in token_classes:
             methods = [cls.complete, cls.match, cls.get_value]
-            if (all([asyncio.iscoroutinefunction(m) for m in methods]) or
-                all([not asyncio.iscoroutinefunction(m) for m in methods])):
+            if (all([inspect.iscoroutinefunction(m) for m in methods]) or
+                all([not inspect.iscoroutinefunction(m) for m in methods])):
                 pass
             else:
                 msg = ("WARNING: A mix of async and non async functions are used for " +
@@ -617,7 +643,7 @@ class NessaidCli(CliInterface):
             raise CliAlreadyRunning("Cli is running")
 
         self.running = True
-        loop = self.loop or asyncio.get_event_loop()
+        loop = self.loop or get_or_create_event_loop()
         self._loop_task = loop.create_task(self.cmdloop(grammarname=grammarname, intro=intro))
 
         if not loop.is_running():

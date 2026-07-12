@@ -23,7 +23,7 @@ class TestCmd(NessaidCmd):
         """
         print("Async Function")
 
-    def do_blocking_input(self, input_str):
+    async def do_blocking_input(self, input_str):
         r"""
         "blocking-input"
         <<

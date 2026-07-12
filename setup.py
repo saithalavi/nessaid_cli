@@ -76,7 +76,6 @@ NessaidCmd is the stripped down version as an alternative for the default Cmd im
 """
 
 install_requires = [
-    "asyncio",
     "ply",
     "nessaid_readline>=0.4.0",
 ]

@@ -5,7 +5,7 @@
 # file included as part of this package.
 #
 
-import asyncio
+import inspect
 
 from nessaid_cli.utils import StdStreamsHolder, convert_to_python_string
 
@@ -562,7 +562,7 @@ class CliInterface(StdStreamsHolder):
 
                 fn = getattr(self, self.get_cli_hook(func_name))
 
-                if asyncio.iscoroutinefunction(fn):
+                if inspect.iscoroutinefunction(fn):
                     res = await fn(*ext_args)
                 else:
                     res = fn(*ext_args)
@@ -653,7 +653,7 @@ class CliInterface(StdStreamsHolder):
 
         try:
             self._token_value_miss += 1
-            if asyncio.iscoroutinefunction(token.get_value):
+            if inspect.iscoroutinefunction(token.get_value):
                 value = await token.get_value(token_input, cli=self)
             else:
                 value =  token.get_value(token_input, cli=self)
@@ -668,7 +668,7 @@ class CliInterface(StdStreamsHolder):
 
     async def match_token(self, token, token_input):
         try:
-            if asyncio.iscoroutinefunction(token.match):
+            if inspect.iscoroutinefunction(token.match):
                 return await token.match(token_input, cli=self)
             else:
                 return token.match(token_input, cli=self)
@@ -677,7 +677,7 @@ class CliInterface(StdStreamsHolder):
 
     async def complete_token(self, token, token_input):
         try:
-            if asyncio.iscoroutinefunction(token.complete):
+            if inspect.iscoroutinefunction(token.complete):
                 return await token.complete(token_input, cli=self)
             else:
                 return token.complete(token_input, cli=self)
